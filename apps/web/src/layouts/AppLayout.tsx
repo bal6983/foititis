@@ -9,6 +9,7 @@ const navItems = [
   { to: '/events', label: 'Εκδηλώσεις' },
   { to: '/profile', label: 'Προφίλ' },
   { to: '/verification', label: 'Επαλήθευση' },
+  { to: '/wanted', label: 'Ψάχνω για' },
 ]
 
 export default function AppLayout() {

@@ -26,9 +26,31 @@ export default function Signup() {
       return
     }
 
+    if (!data.session) {
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+      if (signInError || !signInData.session) {
+        const details = signInError?.message
+          ? ` (${signInError.message})`
+          : ''
+        setErrorMessage(`Δεν ήταν δυνατή η δημιουργία λογαριασμού.${details}`)
+        setIsSubmitting(false)
+        return
+      }
+    }
+
+    const profileEmail = data.user.email ?? email
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert({ id: data.user.id })
+      .insert({
+        id: data.user.id,
+        email: profileEmail,
+        is_verified_student: false,
+      })
 
     if (profileError) {
       const details = profileError.message ? ` (${profileError.message})` : ''

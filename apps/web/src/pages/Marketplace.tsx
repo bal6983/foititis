@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -7,11 +7,32 @@ type MarketplaceListing = {
   title: string
   price: string
   condition: string
+  condition_rating: number | null
   location: string
+  location_id: string | null
+  locations: { id: string; name: string } | null
   category: string
+  category_id: string | null
+  categories: { id: string; name: string } | null
   description: string
   created_at: string
 }
+
+type CategoryOption = {
+  id: string
+  name: string
+}
+
+const conditionLabels: Record<number, string> = {
+  1: 'Πολύ κακή',
+  2: 'Κακή',
+  3: 'Μέτρια',
+  4: 'Καλή',
+  5: 'Πολύ καλή',
+}
+
+const getConditionLabel = (value?: number | null) =>
+  typeof value === 'number' ? conditionLabels[value] ?? '' : ''
 
 const formatDate = (value: string) => {
   const date = new Date(value)
@@ -27,6 +48,44 @@ export default function Marketplace() {
   const [errorMessage, setErrorMessage] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [categories, setCategories] = useState<CategoryOption[]>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+  const [categoriesErrorMessage, setCategoriesErrorMessage] = useState('')
+  const [selectedCategoryId, setSelectedCategoryId] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadCategories = async () => {
+      setIsLoadingCategories(true)
+      setCategoriesErrorMessage('')
+
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name')
+        .order('name', { ascending: true })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setCategoriesErrorMessage(
+          `Δεν ήταν δυνατή η φόρτωση των κατηγοριών.${details}`,
+        )
+        setIsLoadingCategories(false)
+        return
+      }
+
+      setCategories(data ?? [])
+      setIsLoadingCategories(false)
+    }
+
+    loadCategories()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -39,13 +98,17 @@ export default function Marketplace() {
       let query = supabase
         .from('listings')
         .select(
-          'id, title, price, condition, location, category, description, created_at',
+          'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at',
         )
+
+      if (selectedCategoryId) {
+        query = query.eq('category_id', selectedCategoryId)
+      }
 
       if (normalizedSearch) {
         const searchPattern = `%${normalizedSearch}%`
         query = query.or(
-          `title.ilike.${searchPattern},category.ilike.${searchPattern},location.ilike.${searchPattern},description.ilike.${searchPattern}`,
+          `title.ilike.${searchPattern},location.ilike.${searchPattern},description.ilike.${searchPattern}`,
         )
       }
 
@@ -69,9 +132,17 @@ export default function Marketplace() {
     return () => {
       isMounted = false
     }
-  }, [searchTerm])
+  }, [searchTerm, selectedCategoryId])
 
-  const hasSearch = searchTerm.length > 0
+  const hasSearch = searchTerm.length > 0 || selectedCategoryId.length > 0
+
+  const handleSearchSubmit = () => {
+    const nextSearch = searchInput.trim()
+    setSearchInput(nextSearch)
+    setSearchTerm(nextSearch)
+  }
+
+  const isSearchDisabled = searchInput.trim().length === 0
 
   return (
     <section className="space-y-6">
@@ -90,24 +161,56 @@ export default function Marketplace() {
         </Link>
       </header>
 
-      <div className="max-w-md">
+      <div className="max-w-md space-y-3">
         <label className="sr-only" htmlFor="marketplace-search">
           Αναζήτηση
         </label>
-        <input
-          id="marketplace-search"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
-          type="search"
-          placeholder="Αναζήτηση σε τίτλο, κατηγορία, τοποθεσία"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            const nextSearch = searchInput.trim()
-            setSearchInput(nextSearch)
-            setSearchTerm(nextSearch)
-          }}
-        />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            id="marketplace-search"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none sm:flex-1 sm:w-auto"
+            type="search"
+            placeholder="Αναζήτηση σε τίτλο, κατηγορία, τοποθεσία"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return
+              handleSearchSubmit()
+            }}
+          />
+          <button
+            type="button"
+            className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            onClick={handleSearchSubmit}
+            disabled={isSearchDisabled}
+          >
+            Αναζήτηση
+          </button>
+        </div>
+        <div>
+          <label className="sr-only" htmlFor="marketplace-category">
+            Κατηγορία
+          </label>
+          <select
+            id="marketplace-category"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            value={selectedCategoryId}
+            onChange={(event) => setSelectedCategoryId(event.target.value)}
+            disabled={isLoadingCategories}
+          >
+            <option value="">Όλες οι κατηγορίες</option>
+            {categories.map((categoryOption) => (
+              <option key={categoryOption.id} value={categoryOption.id}>
+                {categoryOption.name}
+              </option>
+            ))}
+          </select>
+          {categoriesErrorMessage ? (
+            <p className="mt-2 text-xs text-rose-600">
+              {categoriesErrorMessage}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {isLoading ? (
@@ -145,41 +248,52 @@ export default function Marketplace() {
 
       {!isLoading && !errorMessage && listings.length > 0 ? (
         <div className="grid gap-4">
-          {listings.map((listing) => (
-            <article
-              key={listing.id}
-              className="rounded-lg border border-slate-200 bg-white p-5"
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold text-slate-900 break-words">
-                    {listing.title}
-                  </h2>
-                  <p className="text-sm text-slate-600 break-words">
-                    {listing.category} · {listing.condition}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600 break-words">
-                    Τοποθεσία: {listing.location}
-                  </p>
+          {listings.map((listing) => {
+            const conditionLabel = getConditionLabel(listing.condition_rating)
+            const categoryName = listing.categories?.name
+            const locationName = listing.locations?.name
+
+            return (
+              <article
+                key={listing.id}
+                className="rounded-lg border border-slate-200 bg-white p-5"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-slate-900 break-words">
+                      {listing.title}
+                    </h2>
+                    {categoryName ? (
+                      <p className="text-sm text-slate-600 break-words">
+                        {categoryName}
+                        {conditionLabel ? ` \u00B7 ${conditionLabel}` : ''}
+                      </p>
+                    ) : null}
+                    {locationName ? (
+                      <p className="mt-2 text-sm text-slate-600 break-words">
+                        Τοποθεσία: {locationName}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="text-sm font-semibold text-slate-900">
+                    {listing.price}
+                  </span>
                 </div>
-                <span className="text-sm font-semibold text-slate-900">
-                  {listing.price}
-                </span>
-              </div>
-              <p className="mt-3 text-sm text-slate-600 break-words whitespace-pre-wrap">
-                {listing.description}
-              </p>
-              <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                <span>{formatDate(listing.created_at)}</span>
-                <Link
-                  className="font-semibold text-slate-900"
-                  to={`/marketplace/${listing.id}`}
-                >
-                  Δες αγγελία
-                </Link>
-              </div>
-            </article>
-          ))}
+                <p className="mt-3 text-sm text-slate-600 break-words whitespace-pre-wrap">
+                  {listing.description}
+                </p>
+                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                  <span>{formatDate(listing.created_at)}</span>
+                  <Link
+                    className="font-semibold text-slate-900"
+                    to={`/marketplace/${listing.id}`}
+                  >
+                    Δες αγγελία
+                  </Link>
+                </div>
+              </article>
+            )
+          })}
         </div>
       ) : null}
     </section>

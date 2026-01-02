@@ -15,6 +15,9 @@ import NotFound from './pages/NotFound'
 import Onboarding from './pages/Onboarding'
 import Profile from './pages/Profile'
 import Signup from './pages/Signup'
+import Wanted from './pages/Wanted'
+import WantedCreate from './pages/WantedCreate'
+import WantedDetail from './pages/WantedDetail'
 import Verification from './pages/Verification'
 import ProtectedRoute from './routes/ProtectedRoute'
 
@@ -39,6 +42,9 @@ function App() {
               path="marketplace/:listingId"
               element={<MarketplaceDetail />}
             />
+            <Route path="wanted" element={<Wanted />} />
+            <Route path="wanted/new" element={<WantedCreate />} />
+            <Route path="wanted/:wantedId" element={<WantedDetail />} />
             <Route path="groups" element={<Groups />} />
             <Route path="notes" element={<Notes />} />
             <Route path="events" element={<Events />} />

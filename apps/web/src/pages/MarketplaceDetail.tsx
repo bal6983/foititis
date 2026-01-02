@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -7,13 +7,29 @@ type MarketplaceListing = {
   title: string
   price: string
   condition: string
+  condition_rating: number | null
   location: string
+  location_id: string | null
+  locations: { id: string; name: string } | null
   category: string
+  category_id: string | null
+  categories: { id: string; name: string } | null
   description: string
   created_at: string
   seller_id: string
   profiles: { display_name: string | null } | null
 }
+
+const conditionLabels: Record<number, string> = {
+  1: 'Πολύ κακή',
+  2: 'Κακή',
+  3: 'Μέτρια',
+  4: 'Καλή',
+  5: 'Πολύ καλή',
+}
+
+const getConditionLabel = (value?: number | null) =>
+  typeof value === 'number' ? conditionLabels[value] ?? '' : ''
 
 const formatDate = (value: string) => {
   const date = new Date(value)
@@ -55,7 +71,7 @@ export default function MarketplaceDetail() {
       const { data, error } = await supabase
         .from('listings')
         .select(
-          'id, title, price, condition, location, category, description, created_at, seller_id, profiles(display_name)',
+          'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at, seller_id, profiles(display_name)',
         )
         .eq('id', listingId)
         .single()
@@ -105,6 +121,9 @@ export default function MarketplaceDetail() {
 
   const sellerName = listing.profiles?.display_name ?? '—'
   const isSeller = currentUserId === listing.seller_id
+  const conditionLabel = getConditionLabel(listing.condition_rating)
+  const categoryName = listing.categories?.name
+  const locationName = listing.locations?.name
 
   const handleDelete = async () => {
     if (!isSeller || isDeleting) {
@@ -145,9 +164,12 @@ export default function MarketplaceDetail() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold break-words">{listing.title}</h1>
-            <p className="text-sm text-slate-600 break-words">
-              {listing.category} · {listing.condition}
-            </p>
+            {categoryName ? (
+              <p className="text-sm text-slate-600 break-words">
+                {categoryName}
+                {conditionLabel ? ` \u00B7 ${conditionLabel}` : ''}
+              </p>
+            ) : null}
           </div>
           <span className="text-lg font-semibold text-slate-900">
             {listing.price}
@@ -157,13 +179,15 @@ export default function MarketplaceDetail() {
 
       <div className="rounded-lg border border-slate-200 bg-white p-5">
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-semibold text-slate-500">Τοποθεσία</dt>
-            <dd className="mt-1 text-slate-900 break-words">{listing.location}</dd>
-          </div>
+          {locationName ? (
+            <div>
+              <dt className="text-xs font-semibold text-slate-500">Τοποθεσία</dt>
+              <dd className="mt-1 text-slate-900 break-words">{locationName}</dd>
+            </div>
+          ) : null}
           <div>
             <dt className="text-xs font-semibold text-slate-500">
-              Δημοσίευση
+              Δημοσιεύτηκε
             </dt>
             <dd className="mt-1 text-slate-900">
               {formatDate(listing.created_at)}
@@ -173,10 +197,12 @@ export default function MarketplaceDetail() {
             <dt className="text-xs font-semibold text-slate-500">Πωλητής</dt>
             <dd className="mt-1 text-slate-900 break-words">{sellerName}</dd>
           </div>
-          <div>
-            <dt className="text-xs font-semibold text-slate-500">Κατηγορία</dt>
-            <dd className="mt-1 text-slate-900 break-words">{listing.category}</dd>
-          </div>
+          {categoryName ? (
+            <div>
+              <dt className="text-xs font-semibold text-slate-500">Κατηγορία</dt>
+              <dd className="mt-1 text-slate-900 break-words">{categoryName}</dd>
+            </div>
+          ) : null}
         </dl>
       </div>
 
