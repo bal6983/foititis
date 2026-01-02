@@ -1,0 +1,6 @@
+node_modules
+dist
+.corepack
+.env
+.env.*
+.DS_Store
