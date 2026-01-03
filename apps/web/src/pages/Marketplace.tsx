@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 type MarketplaceListing = {
@@ -21,6 +21,10 @@ type MarketplaceListing = {
 type CategoryOption = {
   id: string
   name: string
+}
+
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values())
 }
 
 const conditionLabels: Record<number, string> = {
@@ -52,6 +56,9 @@ export default function Marketplace() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true)
   const [categoriesErrorMessage, setCategoriesErrorMessage] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
+  const [searchParams] = useSearchParams()
+  const mineParam = searchParams.get('mine')
+  const isMineFilter = mineParam === '1' || mineParam === 'true'
 
   useEffect(() => {
     let isMounted = true
@@ -76,7 +83,7 @@ export default function Marketplace() {
         return
       }
 
-      setCategories(data ?? [])
+      setCategories(uniqueById(data ?? []))
       setIsLoadingCategories(false)
     }
 
@@ -100,6 +107,20 @@ export default function Marketplace() {
         .select(
           'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at',
         )
+
+      if (isMineFilter) {
+        const { data: userData, error: userError } =
+          await supabase.auth.getUser()
+
+        if (userError || !userData.user) {
+          const details = userError?.message ? ` (${userError.message})` : ''
+          setErrorMessage(`Unable to load your listings.${details}`)
+          setIsLoading(false)
+          return
+        }
+
+        query = query.eq('seller_id', userData.user.id)
+      }
 
       if (selectedCategoryId) {
         query = query.eq('category_id', selectedCategoryId)
@@ -132,7 +153,7 @@ export default function Marketplace() {
     return () => {
       isMounted = false
     }
-  }, [searchTerm, selectedCategoryId])
+  }, [searchTerm, selectedCategoryId, isMineFilter])
 
   const hasSearch = searchTerm.length > 0 || selectedCategoryId.length > 0
 

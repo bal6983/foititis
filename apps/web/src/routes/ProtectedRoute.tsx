@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 type GuardState =
@@ -10,6 +10,7 @@ type GuardState =
   | { status: 'error'; message: string }
 
 export default function ProtectedRoute() {
+  const location = useLocation()
   const [guardState, setGuardState] = useState<GuardState>({
     status: 'loading',
   })
@@ -51,7 +52,7 @@ export default function ProtectedRoute() {
         const details = profileError?.message ? ` (${profileError.message})` : ''
         setGuardState({
           status: 'error',
-          message: `Δεν βρέθηκε προφίλ.${details}`,
+          message: `Δεν ήταν δυνατή η φόρτωση προφίλ.${details}`,
         })
         return
       }
@@ -69,15 +70,13 @@ export default function ProtectedRoute() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [location.pathname])
 
   if (guardState.status === 'loading') {
     return (
       <section className="space-y-2">
         <h1 className="text-xl font-semibold">Φόρτωση</h1>
-        <p className="text-sm text-slate-600">
-          Έλεγχος σύνδεσης...
-        </p>
+        <p className="text-sm text-slate-600">Έλεγχος σύνδεσης...</p>
       </section>
     )
   }
@@ -87,7 +86,14 @@ export default function ProtectedRoute() {
   }
 
   if (guardState.status === 'needs-onboarding') {
+    if (location.pathname === '/onboarding') {
+      return <Outlet />
+    }
     return <Navigate to="/onboarding" replace />
+  }
+
+  if (guardState.status === 'ready' && location.pathname === '/onboarding') {
+    return <Navigate to="/dashboard" replace />
   }
 
   if (guardState.status === 'error') {

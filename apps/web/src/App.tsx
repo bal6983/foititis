@@ -1,11 +1,10 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout'
 import AuthLayout from './layouts/AuthLayout'
 import RootLayout from './layouts/RootLayout'
-import AppHome from './pages/AppHome'
+import Dashboard from './pages/Dashboard'
 import Events from './pages/Events'
 import Groups from './pages/Groups'
-import Home from './pages/Home'
 import Login from './pages/Login'
 import Marketplace from './pages/Marketplace'
 import MarketplaceCreate from './pages/MarketplaceCreate'
@@ -14,6 +13,7 @@ import Notes from './pages/Notes'
 import NotFound from './pages/NotFound'
 import Onboarding from './pages/Onboarding'
 import Profile from './pages/Profile'
+import ProfileEdit from './pages/ProfileEdit'
 import Signup from './pages/Signup'
 import Wanted from './pages/Wanted'
 import WantedCreate from './pages/WantedCreate'
@@ -26,16 +26,17 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AuthLayout />}>
+          <Route index element={<Login />} />
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
         </Route>
-        <Route element={<RootLayout />}>
-          <Route index element={<Home />} />
-          <Route path="onboarding" element={<Onboarding />} />
-        </Route>
         <Route element={<ProtectedRoute />}>
+          <Route element={<RootLayout />}>
+            <Route path="onboarding" element={<Onboarding />} />
+          </Route>
           <Route element={<AppLayout />}>
-            <Route path="app" element={<AppHome />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="app" element={<Navigate to="/dashboard" replace />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="marketplace/new" element={<MarketplaceCreate />} />
             <Route
@@ -49,6 +50,7 @@ function App() {
             <Route path="notes" element={<Notes />} />
             <Route path="events" element={<Events />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="profile/edit" element={<ProfileEdit />} />
             <Route path="verification" element={<Verification />} />
           </Route>
         </Route>

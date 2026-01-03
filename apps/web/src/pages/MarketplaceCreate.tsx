@@ -12,6 +12,10 @@ type LocationOption = {
   name: string
 }
 
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values())
+}
+
 const conditionLabels: Record<number, string> = {
   1: 'Πολύ κακή',
   2: 'Κακή',
@@ -59,7 +63,7 @@ export default function MarketplaceCreate() {
         return
       }
 
-      setCategories(data ?? [])
+      setCategories(uniqueById(data ?? []))
       setIsLoadingCategories(false)
     }
 
@@ -90,7 +94,7 @@ export default function MarketplaceCreate() {
         return
       }
 
-      setLocations(data ?? [])
+      setLocations(uniqueById(data ?? []))
       setIsLoadingLocations(false)
     }
 

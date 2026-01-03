@@ -48,7 +48,7 @@ export default function Onboarding() {
       }
 
       if (profile.onboarding_completed) {
-        navigate('/app', { replace: true })
+        navigate('/dashboard', { replace: true })
         return
       }
 
@@ -107,7 +107,7 @@ export default function Onboarding() {
     }
 
     setIsSubmitting(false)
-    navigate('/app')
+    navigate('/dashboard')
   }
 
   if (isLoading) {

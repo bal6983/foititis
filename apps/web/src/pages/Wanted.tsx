@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 type WantedListing = {
@@ -25,6 +25,10 @@ type LocationOption = {
   name: string
 }
 
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values())
+}
+
 const formatDate = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
@@ -47,6 +51,9 @@ export default function Wanted() {
   const [locationsErrorMessage, setLocationsErrorMessage] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [selectedLocationId, setSelectedLocationId] = useState('')
+  const [searchParams] = useSearchParams()
+  const mineParam = searchParams.get('mine')
+  const isMineFilter = mineParam === '1' || mineParam === 'true'
 
   useEffect(() => {
     let isMounted = true
@@ -71,7 +78,7 @@ export default function Wanted() {
         return
       }
 
-      setCategories(data ?? [])
+      setCategories(uniqueById(data ?? []))
       setIsLoadingCategories(false)
     }
 
@@ -105,7 +112,7 @@ export default function Wanted() {
         return
       }
 
-      setLocations(data ?? [])
+      setLocations(uniqueById(data ?? []))
       setIsLoadingLocations(false)
     }
 
@@ -129,6 +136,20 @@ export default function Wanted() {
         .select(
           'id, title, category, category_id, categories ( id, name ), location, location_id, locations ( id, name ), description, created_at',
         )
+
+      if (isMineFilter) {
+        const { data: userData, error: userError } =
+          await supabase.auth.getUser()
+
+        if (userError || !userData.user) {
+          const details = userError?.message ? ` (${userError.message})` : ''
+          setErrorMessage(`Unable to load your requests.${details}`)
+          setIsLoading(false)
+          return
+        }
+
+        query = query.eq('user_id', userData.user.id)
+      }
 
       if (selectedCategoryId) {
         query = query.eq('category_id', selectedCategoryId)
@@ -169,7 +190,7 @@ export default function Wanted() {
     return () => {
       isMounted = false
     }
-  }, [searchTerm, selectedCategoryId, selectedLocationId])
+  }, [searchTerm, selectedCategoryId, selectedLocationId, isMineFilter])
 
   const hasFilters =
     searchTerm.length > 0 ||

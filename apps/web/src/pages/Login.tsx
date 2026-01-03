@@ -26,22 +26,8 @@ export default function Login() {
       return
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('onboarding_completed')
-      .eq('id', data.user.id)
-      .single()
-
-    if (profileError || !profile) {
-      const details = profileError?.message ? ` (${profileError.message})` : ''
-      setErrorMessage(`Δεν βρέθηκε προφίλ.${details}`)
-      setIsSubmitting(false)
-      return
-    }
-
-    const targetPath = profile.onboarding_completed ? '/app' : '/onboarding'
     setIsSubmitting(false)
-    navigate(targetPath)
+    navigate('/dashboard')
   }
 
   return (
