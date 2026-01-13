@@ -7,8 +7,40 @@ type OptionItem = {
   name: string
 }
 
+type UniversityOption = OptionItem & {
+  email_domains?: string[] | null
+}
+
+type OnboardingConfirmStorage = {
+  city_id: string | null
+  city_name: string
+  university_id: string | null
+  university_name: string
+  school_id: string | null
+  school_name: string
+}
+
 function uniqueById<T extends { id: string }>(items: T[]) {
   return Array.from(new Map(items.map((item) => [item.id, item])).values())
+}
+
+const onboardingConfirmStorageKey = 'onboardingConfirmData'
+
+const normalizeDomain = (domain: string) =>
+  domain.trim().toLowerCase().replace(/^@/, '')
+
+const extractEmailDomain = (value: string) => {
+  const atIndex = value.lastIndexOf('@')
+  if (atIndex === -1) return ''
+  return normalizeDomain(value.slice(atIndex + 1))
+}
+
+const persistOnboardingConfirmData = (data: OnboardingConfirmStorage) => {
+  try {
+    sessionStorage.setItem(onboardingConfirmStorageKey, JSON.stringify(data))
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export default function Signup() {
@@ -20,7 +52,7 @@ export default function Signup() {
   const [universityId, setUniversityId] = useState('')
   const [schoolId, setSchoolId] = useState('')
   const [cities, setCities] = useState<OptionItem[]>([])
-  const [universities, setUniversities] = useState<OptionItem[]>([])
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
   const [schools, setSchools] = useState<OptionItem[]>([])
   const [isLoadingCities, setIsLoadingCities] = useState(true)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
@@ -29,6 +61,8 @@ export default function Signup() {
   const [universitiesErrorMessage, setUniversitiesErrorMessage] = useState('')
   const [schoolsErrorMessage, setSchoolsErrorMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showEmailConfirmationMessage, setShowEmailConfirmationMessage] =
+    useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
 
@@ -81,7 +115,7 @@ export default function Signup() {
 
       const { data, error } = await supabase
         .from('universities')
-        .select('id, name')
+        .select('id, name, email_domains')
         .eq('city_id', cityId)
         .order('name', { ascending: true })
 
@@ -175,6 +209,10 @@ export default function Signup() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setErrorMessage('')
+    setShowEmailConfirmationMessage(false)
+    if (isStudentEmailDomainMismatch) {
+      return
+    }
     setIsSubmitting(true)
 
     if (!studentType) {
@@ -197,6 +235,21 @@ export default function Signup() {
       return
     }
 
+    const selectedCity = cities.find((city) => city.id === cityId)
+    const selectedUniversity = universities.find(
+      (university) => university.id === universityId,
+    )
+    const selectedSchool = schools.find((school) => school.id === schoolId)
+
+    persistOnboardingConfirmData({
+      city_id: cityId || null,
+      city_name: selectedCity?.name ?? '',
+      university_id: universityId || null,
+      university_name: selectedUniversity?.name ?? '',
+      school_id: schoolId || null,
+      school_name: selectedSchool?.name ?? '',
+    })
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -217,6 +270,18 @@ export default function Signup() {
         })
 
       if (signInError || !signInData.session) {
+        const rawMessage = signInError?.message ?? ''
+        const normalizedMessage = rawMessage.toLowerCase()
+        const isEmailNotConfirmed =
+          normalizedMessage.includes('email not confirmed') ||
+          normalizedMessage.includes('not confirmed')
+
+        if (isEmailNotConfirmed) {
+          setShowEmailConfirmationMessage(true)
+          setIsSubmitting(false)
+          return
+        }
+
         const details = signInError?.message
           ? ` (${signInError.message})`
           : ''
@@ -270,8 +335,60 @@ export default function Signup() {
   }
 
   const isStudent = studentType === 'student'
+  const selectedUniversity = universities.find(
+    (university) => university.id === universityId,
+  )
+  const selectedUniversityDomains = (selectedUniversity?.email_domains ?? [])
+    .map(normalizeDomain)
+    .filter(Boolean)
+  const emailDomain = extractEmailDomain(email)
+  const isStudentEmailDomainMismatch =
+    isStudent &&
+    universityId &&
+    emailDomain.length > 0 &&
+    !selectedUniversityDomains.includes(emailDomain)
   const isUniversityDisabled = !isStudent || !cityId || isLoadingUniversities
   const isSchoolDisabled = !isStudent || !universityId || isLoadingSchools
+  const isSubmitDisabled = isSubmitting || isStudentEmailDomainMismatch
+  const emailField = (
+    <label className="block space-y-1 text-sm font-medium">
+      Email
+      <input
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+        type="email"
+        autoComplete="email"
+        placeholder="you@uni.gr"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        required
+      />
+      {isStudent ? (
+        <span className="text-xs text-slate-500">
+          Χρησιμοποίησε το πανεπιστημιακό σου email (π.χ. @auth.gr)
+        </span>
+      ) : null}
+      {isStudentEmailDomainMismatch ? (
+        <span className="text-xs text-rose-600">
+          Για φοιτητές απαιτείται το πανεπιστημιακό email.
+        </span>
+      ) : null}
+    </label>
+  )
+  const passwordField = (
+    <label className="block space-y-1 text-sm font-medium">
+      Κωδικός
+      <input
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+        type="password"
+        autoComplete="new-password"
+        placeholder="Τουλάχιστον 8 χαρακτήρες"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        required
+        minLength={8}
+      />
+    </label>
+  )
 
   return (
     <section className="space-y-6">
@@ -283,32 +400,8 @@ export default function Signup() {
       </header>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block space-y-1 text-sm font-medium">
-          Email
-          <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
-            type="email"
-            autoComplete="email"
-            placeholder="you@uni.gr"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-
-        <label className="block space-y-1 text-sm font-medium">
-          Κωδικός
-          <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Τουλάχιστον 8 χαρακτήρες"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            minLength={8}
-          />
-        </label>
+        {!isStudent ? emailField : null}
+        {!isStudent ? passwordField : null}
 
         <fieldset className="space-y-2 text-sm">
           <legend className="font-medium">
@@ -431,10 +524,13 @@ export default function Signup() {
           </div>
         ) : null}
 
+        {isStudent ? emailField : null}
+        {isStudent ? passwordField : null}
+
         <button
           className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitDisabled}
         >
           {isSubmitting ? 'Γίνεται εγγραφή...' : 'Δημιουργία λογαριασμού'}
         </button>
@@ -444,6 +540,20 @@ export default function Signup() {
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {errorMessage}
         </p>
+      ) : null}
+      {showEmailConfirmationMessage ? (
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <p className="font-semibold">Έλεγξε το email σου 📬</p>
+          <p>
+            Σου στείλαμε ένα email επιβεβαίωσης για να ενεργοποιήσεις τον
+            λογαριασμό σου. Άνοιξε το email και πάτησε τον σύνδεσμο
+            επιβεβαίωσης για να συνεχίσεις.
+          </p>
+          <p className="text-xs text-slate-500">
+            Αν δεν το βλέπεις, έλεγξε και τον φάκελο ανεπιθύμητης αλληλογραφίας
+            (spam).
+          </p>
+        </div>
       ) : null}
 
       <p className="text-sm text-slate-600">

@@ -17,7 +17,6 @@ type WantedItem = {
 type ProfileRecord = {
   display_name: string | null
   is_verified_student: boolean | null
-  created_at: string | null
   city_id: string | null
   university_id: string | null
   school_id: string | null
@@ -36,16 +35,17 @@ const formatDate = (value: string) => {
 export default function Profile() {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [universityEmail, setUniversityEmail] = useState('')
   const [universityName, setUniversityName] = useState('')
   const [schoolName, setSchoolName] = useState('')
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
-  const [isPreStudent, setIsPreStudent] = useState(false)
-  const [preStudentExpiry, setPreStudentExpiry] = useState<Date | null>(null)
-  const [preStudentRemaining, setPreStudentRemaining] = useState('')
   const [listings, setListings] = useState<ListingItem[]>([])
   const [wantedListings, setWantedListings] = useState<WantedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [isVerificationLoading, setIsVerificationLoading] = useState(false)
+  const [verificationSuccess, setVerificationSuccess] = useState('')
+  const [verificationError, setVerificationError] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -70,7 +70,7 @@ export default function Profile() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'display_name, is_verified_student, created_at, city_id, university_id, school_id, universities(name), schools(name)',
+          'display_name, is_verified_student, city_id, university_id, school_id, universities(name), schools(name)',
         )
         .eq('id', userData.user.id)
         .maybeSingle()
@@ -88,28 +88,6 @@ export default function Profile() {
       setUniversityName(typedProfile?.universities?.name ?? '')
       setSchoolName(typedProfile?.schools?.name ?? '')
       setIsVerifiedStudent(Boolean(typedProfile?.is_verified_student))
-
-      const hasAcademicInfo = Boolean(
-        typedProfile?.city_id ||
-          typedProfile?.university_id ||
-          typedProfile?.school_id,
-      )
-      const preStudent =
-        !typedProfile?.is_verified_student && !hasAcademicInfo
-      setIsPreStudent(preStudent)
-
-      if (preStudent && typedProfile?.created_at) {
-        const createdAt = new Date(typedProfile.created_at)
-        if (Number.isNaN(createdAt.getTime())) {
-          setPreStudentExpiry(null)
-        } else {
-          const expiresAt = new Date(createdAt)
-          expiresAt.setMonth(expiresAt.getMonth() + 3)
-          setPreStudentExpiry(expiresAt)
-        }
-      } else {
-        setPreStudentExpiry(null)
-      }
 
       const [listingsResult, wantedResult] = await Promise.all([
         supabase
@@ -142,55 +120,28 @@ export default function Profile() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!isPreStudent || !preStudentExpiry) {
-      setPreStudentRemaining('')
+
+  const handleVerificationRequest = async () => {
+    setVerificationError('')
+    setVerificationSuccess('')
+    setIsVerificationLoading(true)
+
+    const { error } = await supabase.rpc(
+      'request_university_verification',
+      { p_university_email: universityEmail },
+    )
+
+    if (error) {
+      setVerificationError(error.message)
+      setIsVerificationLoading(false)
       return
     }
 
-    const updateRemaining = () => {
-      const now = new Date()
-      const diffMs = preStudentExpiry.getTime() - now.getTime()
-
-      if (Number.isNaN(diffMs)) {
-        setPreStudentRemaining('')
-        return
-      }
-
-      if (diffMs <= 0) {
-        setPreStudentRemaining(
-          'Η περίοδος των τριών μηνών έχει λήξει. Το προφίλ σου θα διαγραφεί αυτόματα.',
-        )
-        return
-      }
-
-      const totalMinutes = Math.ceil(diffMs / 60000)
-      const days = Math.floor(totalMinutes / 1440)
-      const hours = Math.floor((totalMinutes % 1440) / 60)
-      const minutes = totalMinutes % 60
-      const parts: string[] = []
-
-      if (days > 0) {
-        parts.push(`${days} ημέρες`)
-      }
-      if (hours > 0) {
-        parts.push(`${hours} ώρες`)
-      }
-      if (days === 0 && minutes > 0) {
-        parts.push(`${minutes} λεπτά`)
-      }
-
-      const remainingLabel = parts.length > 0 ? parts.join(' και ') : 'λίγο'
-      setPreStudentRemaining(
-        `Απομένουν ${remainingLabel} μέχρι τη λήξη του pre-student προφίλ.`,
-      )
-    }
-
-    updateRemaining()
-    const intervalId = window.setInterval(updateRemaining, 60000)
-
-    return () => window.clearInterval(intervalId)
-  }, [isPreStudent, preStudentExpiry])
+    setVerificationSuccess(
+      'Σου στείλαμε email επιβεβαίωσης. Έλεγξε το inbox σου.',
+    )
+    setIsVerificationLoading(false)
+  }
 
   const name = displayName || email
   const metaParts = [universityName, schoolName].filter((value) =>
@@ -240,17 +191,49 @@ export default function Profile() {
         <p className="text-sm text-rose-600">{errorMessage}</p>
       ) : null}
 
-      {isPreStudent ? (
+      {!isVerifiedStudent ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="font-semibold">Pre-student προφίλ</p>
-          {preStudentRemaining ? (
-            <p className="mt-1">{preStudentRemaining}</p>
-          ) : null}
           <p className="mt-1 text-amber-800">
             Εφόσον αποκτήσεις φοιτητικό mail, επεξεργάσου το προφίλ σου και
             ανανέωσε το mail σου ώστε πλέον να γίνεται verified.
           </p>
         </div>
+      ) : null}
+
+      {!isVerifiedStudent ? (
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+          <label className="block space-y-1 text-sm font-medium">
+            University email
+            <input
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              type="email"
+              value={universityEmail}
+              onChange={(event) => setUniversityEmail(event.target.value)}
+            />
+          </label>
+
+          <button
+            className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onClick={handleVerificationRequest}
+            disabled={isVerificationLoading}
+          >
+            {isVerificationLoading ? 'Verify...' : 'Verify'}
+          </button>
+
+          {verificationSuccess ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {verificationSuccess}
+            </p>
+          ) : null}
+
+          {verificationError ? (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {verificationError}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       <div className="grid gap-4">

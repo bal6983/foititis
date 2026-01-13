@@ -12,9 +12,12 @@ import MarketplaceDetail from './pages/MarketplaceDetail'
 import Notes from './pages/Notes'
 import NotFound from './pages/NotFound'
 import Onboarding from './pages/Onboarding'
+import OnboardingConfirm from './pages/OnboardingConfirm'
 import Profile from './pages/Profile'
 import ProfileEdit from './pages/ProfileEdit'
+import AuthCallback from './pages/AuthCallback'
 import Signup from './pages/Signup'
+import Students from './pages/Students'
 import Wanted from './pages/Wanted'
 import WantedCreate from './pages/WantedCreate'
 import WantedDetail from './pages/WantedDetail'
@@ -26,6 +29,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AuthLayout />}>
+          <Route path="auth/callback" element={<AuthCallback />} />
           <Route index element={<Login />} />
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
@@ -33,6 +37,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<RootLayout />}>
             <Route path="onboarding" element={<Onboarding />} />
+            <Route path="onboarding-confirm" element={<OnboardingConfirm />} />
           </Route>
           <Route element={<AppLayout />}>
             <Route path="dashboard" element={<Dashboard />} />
@@ -51,6 +56,7 @@ function App() {
             <Route path="events" element={<Events />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profile/edit" element={<ProfileEdit />} />
+            <Route path="students" element={<Students />} />
             <Route path="verification" element={<Verification />} />
           </Route>
         </Route>
