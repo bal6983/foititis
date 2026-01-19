@@ -15,6 +15,9 @@ import Onboarding from './pages/Onboarding'
 import OnboardingConfirm from './pages/OnboardingConfirm'
 import Profile from './pages/Profile'
 import ProfileEdit from './pages/ProfileEdit'
+import PublicProfile from './pages/PublicProfile'
+import ChatThread from './pages/ChatThread'
+import Chats from './pages/Chats'
 import AuthCallback from './pages/AuthCallback'
 import Signup from './pages/Signup'
 import Students from './pages/Students'
@@ -56,6 +59,9 @@ function App() {
             <Route path="events" element={<Events />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profile/edit" element={<ProfileEdit />} />
+            <Route path="/profile/:id" element={<PublicProfile />} />
+            <Route path="/chat/:conversationId" element={<ChatThread />} />
+            <Route path="chats" element={<Chats />} />
             <Route path="students" element={<Students />} />
             <Route path="verification" element={<Verification />} />
           </Route>

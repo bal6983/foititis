@@ -28,6 +28,11 @@ Developer guide for the web app in `apps/web`.
 - `apps/web/src/components`: shared UI
 - `apps/web/src/lib/supabaseClient.ts`: Supabase client configuration
 
+## Current status
+- Dashboard recommendations include CTA + filters, and cards show display name, university, school, study year.
+- Students page uses the same card layout and client-side filters (no extra fetch).
+- Backend/RPC logic unchanged; recommendations still come from `get_recommended_student_profiles`.
+
 ## Marketplace behavior
 - Listing creation is restricted to verified students (enforced by Supabase/RLS).
 - Listing detail contact CTA is visible to all authenticated users.
