@@ -19,6 +19,17 @@ type PublicProfileRow = {
   university_id: string | null
 }
 
+type UniversityOption = {
+  id: string
+  name: string
+}
+
+type SchoolOption = {
+  id: string
+  name: string
+  university_id: string | null
+}
+
 type CurrentProfile = {
   schoolId: string | null
   universityId: string | null
@@ -98,6 +109,12 @@ export default function Students() {
   const [searchName, setSearchName] = useState('')
   const [searchUniversity, setSearchUniversity] = useState('')
   const [searchSchool, setSearchSchool] = useState('')
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
+  const [schools, setSchools] = useState<SchoolOption[]>([])
+  const [isLoadingUniversities, setIsLoadingUniversities] = useState(true)
+  const [isLoadingSchools, setIsLoadingSchools] = useState(true)
+  const [searchUniversitiesError, setSearchUniversitiesError] = useState('')
+  const [searchSchoolsError, setSearchSchoolsError] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResultCard[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
@@ -309,6 +326,52 @@ export default function Students() {
   useEffect(() => {
     let isMounted = true
 
+    const loadSearchOptions = async () => {
+      setIsLoadingUniversities(true)
+      setIsLoadingSchools(true)
+      setSearchUniversitiesError('')
+      setSearchSchoolsError('')
+
+      const [universitiesResponse, schoolsResponse] = await Promise.all([
+        supabase.from('universities').select('id, name').order('name'),
+        supabase
+          .from('schools')
+          .select('id, name, university_id')
+          .order('name'),
+      ])
+
+      if (!isMounted) return
+
+      if (universitiesResponse.error) {
+        console.error('Universities load error:', universitiesResponse.error)
+        setSearchUniversitiesError('Unable to load universities.')
+        setUniversities([])
+      } else {
+        setUniversities(universitiesResponse.data ?? [])
+      }
+
+      if (schoolsResponse.error) {
+        console.error('Schools load error:', schoolsResponse.error)
+        setSearchSchoolsError('Unable to load schools.')
+        setSchools([])
+      } else {
+        setSchools(schoolsResponse.data ?? [])
+      }
+
+      setIsLoadingUniversities(false)
+      setIsLoadingSchools(false)
+    }
+
+    loadSearchOptions()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
     const loadRecommendations = async () => {
       setIsLoading(true)
       setErrorMessage('')
@@ -505,6 +568,7 @@ export default function Students() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
               placeholder="Πανεπιστήμιο"
               type="search"
+              list="universities"
               value={searchUniversity}
               onChange={(event) => setSearchUniversity(event.target.value)}
             />
@@ -512,10 +576,21 @@ export default function Students() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
               placeholder="Σχολή"
               type="search"
+              list="schools"
               value={searchSchool}
               onChange={(event) => setSearchSchool(event.target.value)}
             />
           </div>
+          <datalist id="universities">
+            {universities.map((university) => (
+              <option key={university.id} value={university.name} />
+            ))}
+          </datalist>
+          <datalist id="schools">
+            {schools.map((school) => (
+              <option key={school.id} value={school.name} />
+            ))}
+          </datalist>
           <button
             className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             type="submit"
@@ -524,6 +599,12 @@ export default function Students() {
             {isSearching ? 'Αναζήτηση...' : 'Αναζήτηση'}
           </button>
         </form>
+        {searchUniversitiesError ? (
+          <p className="text-xs text-rose-600">{searchUniversitiesError}</p>
+        ) : null}
+        {searchSchoolsError ? (
+          <p className="text-xs text-rose-600">{searchSchoolsError}</p>
+        ) : null}
         {searchError ? (
           <p className="text-sm text-rose-600">{searchError}</p>
         ) : null}
