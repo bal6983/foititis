@@ -17,6 +17,8 @@ type WantedItem = {
 type ProfileRecord = {
   display_name: string | null
   is_verified_student: boolean | null
+  is_pre_student: boolean | null
+  created_at: string | null
   city_id: string | null
   university_id: string | null
   school_id: string | null
@@ -33,6 +35,22 @@ const formatDate = (value: string) => {
   return date.toLocaleDateString('el-GR')
 }
 
+const getCountdownLabel = (createdAt: string | null) => {
+  if (!createdAt) return ''
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) {
+    return ''
+  }
+  const expiresAt = new Date(created)
+  expiresAt.setMonth(expiresAt.getMonth() + 4)
+  const diffMs = expiresAt.getTime() - Date.now()
+  if (diffMs <= 0) {
+    return 'Έληξε'
+  }
+  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  return `${daysLeft} ημέρες`
+}
+
 export default function Profile() {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -45,6 +63,8 @@ export default function Profile() {
   const [avatarUploadSuccess, setAvatarUploadSuccess] = useState('')
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
+  const [isPreStudent, setIsPreStudent] = useState(false)
+  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null)
   const [listings, setListings] = useState<ListingItem[]>([])
   const [wantedListings, setWantedListings] = useState<WantedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -76,7 +96,7 @@ export default function Profile() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'display_name, is_verified_student, city_id, university_id, school_id, avatar_url, universities(name), schools(name)',
+          'display_name, is_verified_student, is_pre_student, created_at, city_id, university_id, school_id, avatar_url, universities(name), schools(name)',
         )
         .eq('id', userData.user.id)
         .maybeSingle()
@@ -96,6 +116,8 @@ export default function Profile() {
       setAvatarUrl(typedProfile?.avatar_url ?? '')
       setAvatarLoadError(false)
       setIsVerifiedStudent(Boolean(typedProfile?.is_verified_student))
+      setIsPreStudent(Boolean(typedProfile?.is_pre_student))
+      setProfileCreatedAt(typedProfile?.created_at ?? null)
 
       const [listingsResult, wantedResult] = await Promise.all([
         supabase
@@ -227,6 +249,14 @@ export default function Profile() {
   const metaLine = metaParts.join(' / ')
   const avatarInitial = name.trim().charAt(0).toUpperCase() || '—'
   const shouldShowAvatar = Boolean(avatarUrl) && !avatarLoadError
+  const countdownLabel = isPreStudent
+    ? getCountdownLabel(profileCreatedAt)
+    : ''
+  const statusIndicator = isVerifiedStudent
+    ? { label: 'V', className: 'text-purple-500' }
+    : isPreStudent
+      ? { label: 'pS', className: 'text-red-500' }
+      : { label: 'S', className: 'text-slate-500' }
 
   if (isLoading) {
     return (
@@ -295,12 +325,10 @@ export default function Profile() {
           <h1 className="text-2xl font-semibold flex flex-wrap items-center gap-2">
             <span className="break-all">{name || 'Χρήστης'}</span>
             <span
-              className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${
-                isVerifiedStudent ? 'text-purple-500' : 'text-red-500'
-              }`}
+              className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${statusIndicator.className}`}
               aria-hidden="true"
             >
-              {isVerifiedStudent ? '✓' : 'pS'}
+              {statusIndicator.label}
             </span>
           </h1>
           {metaLine ? (
@@ -319,13 +347,13 @@ export default function Profile() {
         <p className="text-sm text-rose-600">{errorMessage}</p>
       ) : null}
 
-      {!isVerifiedStudent ? (
+      {isPreStudent ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="font-semibold">Pre-student προφίλ</p>
-          <p className="mt-1 text-amber-800">
-            Εφόσον αποκτήσεις φοιτητικό mail, επεξεργάσου το προφίλ σου και
-            ανανέωσε το mail σου ώστε πλέον να γίνεται verified.
-          </p>
+          <p className="font-semibold">Προφίλ pre-student</p>
+          {countdownLabel ? (
+            <p className="mt-1 text-amber-800">Χρόνος που απομένει: {countdownLabel}</p>
+          ) : null}
+          <p className="mt-1 text-amber-800">Επαλήθευσε πανεπιστημιακό email για πλήρη πρόσβαση.</p>
         </div>
       ) : null}
 
@@ -363,6 +391,7 @@ export default function Profile() {
           ) : null}
         </section>
       ) : null}
+
 
       <div className="grid gap-4">
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">

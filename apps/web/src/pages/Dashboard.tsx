@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -13,6 +13,8 @@ type RecommendedProfileResult = {
 type ProfileSummary = {
   display_name: string | null
   is_verified_student: boolean | null
+  is_pre_student: boolean | null
+  created_at: string | null
   city_id: string | null
   university_id: string | null
   school_id: string | null
@@ -25,6 +27,8 @@ type RecommendedProfileCard = {
   displayName: string | null
   studyYear: number | null
   avatarUrl: string
+  isVerifiedStudent: boolean
+  isPreStudent: boolean
   label: string
   matchCount: number
   orderIndex: number
@@ -54,6 +58,8 @@ type MatchFilterId =
   | 'university'
   | 'school'
 
+type AudienceFilterId = 'all' | 'prestudent' | 'students'
+
 const matchFilters: { id: MatchFilterId; label: string }[] = [
   { id: 'all', label: 'Όλοι' },
   {
@@ -65,6 +71,11 @@ const matchFilters: { id: MatchFilterId; label: string }[] = [
   { id: 'city', label: 'Ίδια πόλη' },
   { id: 'university', label: 'Ίδιο πανεπιστήμιο' },
   { id: 'school', label: 'Ίδια σχολή' },
+]
+
+const audienceFilters: { id: AudienceFilterId; label: string }[] = [
+  { id: 'prestudent', label: 'Pre-students' },
+  { id: 'students', label: 'Students' },
 ]
 
 const getMatchLabel = (
@@ -99,9 +110,34 @@ const getMatchLabel = (
 const getAvatarInitial = (value: string) =>
   value.trim().charAt(0).toUpperCase() || '—'
 
+const getStatusBadge = (isPreStudent: boolean, isVerifiedStudent: boolean) => {
+  if (isVerifiedStudent) {
+    return { label: 'Verified', className: 'bg-emerald-100 text-emerald-700' }
+  }
+  return { label: 'Not verified', className: 'bg-rose-100 text-rose-700' }
+}
+
+const getCountdownLabel = (createdAt: string | null) => {
+  if (!createdAt) return ''
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) {
+    return ''
+  }
+  const expiresAt = new Date(created)
+  expiresAt.setMonth(expiresAt.getMonth() + 4)
+  const diffMs = expiresAt.getTime() - Date.now()
+  if (diffMs <= 0) {
+    return 'Έληξε'
+  }
+  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  return `${daysLeft} ημέρες`
+}
+
 export default function Dashboard() {
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
+  const [isPreStudent, setIsPreStudent] = useState(false)
+  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null)
   const [profile, setProfile] = useState<ProfileSummary | null>(null)
   const [recommendedResults, setRecommendedResults] = useState<
     RecommendedProfileResult[] | null
@@ -109,6 +145,9 @@ export default function Dashboard() {
   const [matchGroups, setMatchGroups] =
     useState<MatchGroups>(emptyMatchGroups)
   const [activeFilter, setActiveFilter] = useState<MatchFilterId>('all')
+  const [audienceFilter, setAudienceFilter] =
+    useState<AudienceFilterId>('all')
+  const defaultFiltersSetRef = useRef(false)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -118,7 +157,20 @@ export default function Dashboard() {
     ...matchGroups.weakMatches,
   ]
 
+  const matchesAudience = (card: RecommendedProfileCard) => {
+    if (audienceFilter === 'prestudent') {
+      return card.isPreStudent
+    }
+    if (audienceFilter === 'students') {
+      return card.isVerifiedStudent
+    }
+    return true
+  }
+
   const filteredCards = allCards.filter((card) => {
+    if (!matchesAudience(card)) {
+      return false
+    }
     switch (activeFilter) {
       case 'schoolUniversityCity':
         return card.schoolMatch && card.universityMatch && card.cityMatch
@@ -142,6 +194,16 @@ export default function Dashboard() {
   const hasAnyResults = allCards.length > 0
 
   useEffect(() => {
+    if (!isPreStudent || defaultFiltersSetRef.current) {
+      return
+    }
+
+    setActiveFilter('schoolCity')
+    setAudienceFilter('prestudent')
+    defaultFiltersSetRef.current = true
+  }, [isPreStudent])
+
+  useEffect(() => {
     let isMounted = true
 
     const loadUser = async () => {
@@ -162,8 +224,10 @@ export default function Dashboard() {
       }
 
       const { data: profileData, error: profileError } = await supabase
-        .from('public_profiles')
-        .select('display_name, is_verified_student, city_id, university_id, school_id')
+        .from('profiles')
+        .select(
+          'display_name, is_verified_student, is_pre_student, created_at, city_id, university_id, school_id',
+        )
         .eq('id', userData.user.id)
         .maybeSingle()
 
@@ -179,6 +243,8 @@ export default function Dashboard() {
       const normalizedProfile: ProfileSummary = {
         display_name: profileData?.display_name ?? null,
         is_verified_student: profileData?.is_verified_student ?? null,
+        is_pre_student: profileData?.is_pre_student ?? null,
+        created_at: profileData?.created_at ?? null,
         city_id: profileData?.city_id ?? null,
         university_id: profileData?.university_id ?? null,
         school_id: profileData?.school_id ?? null,
@@ -187,6 +253,8 @@ export default function Dashboard() {
       setProfile(normalizedProfile)
       setDisplayName(normalizedProfile.display_name ?? null)
       setIsVerifiedStudent(Boolean(normalizedProfile.is_verified_student))
+      setIsPreStudent(Boolean(normalizedProfile.is_pre_student))
+      setProfileCreatedAt(normalizedProfile.created_at ?? null)
 
       const { data: recommendedData, error: recommendedError } =
         await supabase.rpc('get_recommended_student_profiles', {
@@ -244,7 +312,13 @@ export default function Dashboard() {
       ) as string[]
       const profileMap = new Map<
         string,
-        { displayName: string | null; studyYear: number | null; avatarUrl: string }
+        {
+          displayName: string | null
+          studyYear: number | null
+          avatarUrl: string
+          isVerifiedStudent: boolean
+          isPreStudent: boolean
+        }
       >()
 
       if (schoolIds.length > 0) {
@@ -270,13 +344,17 @@ export default function Dashboard() {
       if (profileIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('public_profiles')
-          .select('id, display_name, study_year, avatar_url')
+          .select(
+            'id, display_name, study_year, avatar_url, is_verified_student, is_pre_student',
+          )
           .in('id', profileIds)
         profilesData?.forEach((profileItem) => {
           profileMap.set(profileItem.id, {
             displayName: profileItem.display_name ?? null,
             studyYear: profileItem.study_year ?? null,
             avatarUrl: profileItem.avatar_url ?? '',
+            isVerifiedStudent: Boolean(profileItem.is_verified_student),
+            isPreStudent: Boolean(profileItem.is_pre_student),
           })
         })
 
@@ -285,7 +363,9 @@ export default function Dashboard() {
             profileIds.map(async (profileId) => {
               const { data: profileItem } = await supabase
                 .from('public_profiles')
-                .select('id, display_name, study_year, avatar_url')
+                .select(
+                  'id, display_name, study_year, avatar_url, is_verified_student, is_pre_student',
+                )
                 .eq('id', profileId)
                 .maybeSingle()
 
@@ -294,6 +374,8 @@ export default function Dashboard() {
                   displayName: profileItem.display_name ?? null,
                   studyYear: profileItem.study_year ?? null,
                   avatarUrl: profileItem.avatar_url ?? '',
+                  isVerifiedStudent: Boolean(profileItem.is_verified_student),
+                  isPreStudent: Boolean(profileItem.is_pre_student),
                 })
               }
             }),
@@ -325,6 +407,8 @@ export default function Dashboard() {
             : '',
           schoolName: item.school_id ? schoolMap.get(item.school_id) ?? '' : '',
           studyYear: profileInfo?.studyYear ?? null,
+          isVerifiedStudent: profileInfo?.isVerifiedStudent ?? false,
+          isPreStudent: profileInfo?.isPreStudent ?? false,
           label: getMatchLabel(schoolMatch, universityMatch, cityMatch),
           matchCount,
           orderIndex: index,
@@ -364,6 +448,14 @@ export default function Dashboard() {
 
   const greetingName = displayName ?? 'Χρήστης'
   const hasGreetingName = greetingName.trim().length > 0
+  const statusIndicator = isVerifiedStudent
+    ? { label: 'V', className: 'text-purple-500' }
+    : isPreStudent
+      ? { label: 'pS', className: 'text-red-500' }
+      : { label: 'S', className: 'text-slate-500' }
+  const countdownLabel = isPreStudent
+    ? getCountdownLabel(profileCreatedAt)
+    : ''
 
   if (isLoading) {
     return (
@@ -388,12 +480,10 @@ export default function Dashboard() {
               <span className="inline-flex items-center gap-2">
                 <span className="break-all">{greetingName}</span>
                 <span
-                  className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${
-                    isVerifiedStudent ? 'text-purple-500' : 'text-red-500'
-                  }`}
+                  className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${statusIndicator.className}`}
                   aria-hidden="true"
                 >
-                  {isVerifiedStudent ? 'ΕΠ' : 'ΜΗ'}
+                  {statusIndicator.label}
                 </span>
               </span>
             </>
@@ -405,6 +495,13 @@ export default function Dashboard() {
           Βρες νέους φοιτητές που ταιριάζουν στο προφίλ σου.
         </p>
       </header>
+
+      {isPreStudent && countdownLabel ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Αντίστροφη μέτρηση pre-student</p>
+          <p className="mt-1 text-amber-800">Χρόνος που απομένει: {countdownLabel}</p>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <p className="text-sm text-rose-600">{errorMessage}</p>
@@ -430,6 +527,28 @@ export default function Dashboard() {
           ) : null}
         </div>
 
+        {isPreStudent && hasAnyResults ? (
+          <div className="flex flex-wrap gap-2">
+            {audienceFilters.map((filter) => {
+              const isActive = audienceFilter === filter.id
+              return (
+                <button
+                  key={filter.id}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    isActive
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  type="button"
+                  onClick={() => setAudienceFilter(filter.id)}
+                >
+                  {filter.label}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+
         {hasAnyResults ? (
           <div className="flex flex-wrap gap-2">
             {matchFilters.map((filter) => {
@@ -454,11 +573,21 @@ export default function Dashboard() {
 
         {cardsToShow.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {cardsToShow.map((profileItem) => (
+            {cardsToShow.map((profileItem) => {
+              const statusBadge = getStatusBadge(
+                profileItem.isPreStudent,
+                profileItem.isVerifiedStudent,
+              )
+              return (
               <div
                 key={profileItem.id}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                className="relative rounded-lg border border-slate-200 bg-slate-50 p-3"
               >
+                  <span
+                    className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.className}`}
+                  >
+                    {statusBadge.label}
+                  </span>
                 <div className="mb-2 flex items-center gap-3">
                   <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500">
                     <span className="absolute inset-0 flex items-center justify-center">
@@ -500,7 +629,7 @@ export default function Dashboard() {
                   Δες προφίλ
                 </Link>
               </div>
-            ))}
+            )})}
           </div>
         ) : (
           <div className="space-y-3">

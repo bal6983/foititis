@@ -17,6 +17,7 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const [userLabel, setUserLabel] = useState('')
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
+  const [isPreStudent, setIsPreStudent] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -34,7 +35,7 @@ export default function AppLayout() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name, is_verified_student')
+        .select('display_name, is_verified_student, is_pre_student')
         .eq('id', userData.user.id)
         .maybeSingle()
 
@@ -42,6 +43,7 @@ export default function AppLayout() {
 
       setUserLabel(profile?.display_name || email)
       setIsVerifiedStudent(Boolean(profile?.is_verified_student))
+      setIsPreStudent(Boolean(profile?.is_pre_student))
     }
 
     loadUser()
@@ -55,6 +57,12 @@ export default function AppLayout() {
     await supabase.auth.signOut()
     navigate('/login')
   }
+
+  const statusIndicator = isVerifiedStudent
+    ? { label: 'V', className: 'text-purple-500' }
+    : isPreStudent
+      ? { label: 'pS', className: 'text-red-500' }
+      : { label: 'S', className: 'text-slate-500' }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -83,12 +91,10 @@ export default function AppLayout() {
               <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                 <span className="max-w-[140px] truncate">{userLabel}</span>
                 <span
-                  className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${
-                    isVerifiedStudent ? 'text-purple-500' : 'text-red-500'
-                  }`}
+                  className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${statusIndicator.className}`}
                   aria-hidden="true"
                 >
-                  {isVerifiedStudent ? '✓' : 'pS'}
+                  {statusIndicator.label}
                 </span>
               </span>
             ) : null}

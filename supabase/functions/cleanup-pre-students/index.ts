@@ -26,7 +26,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 serve(async () => {
   const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - 3)
+  cutoff.setMonth(cutoff.getMonth() - 4)
 
   const { data, error } = await supabase
     .from("profiles")

@@ -253,6 +253,12 @@ export default function Signup() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          is_pre_student: studentType === 'pre-student',
+          student_type: studentType,
+        },
+      },
     })
 
     if (error || !data.user) {
@@ -297,6 +303,7 @@ export default function Signup() {
       email: string
       is_verified_student: boolean
       onboarding_completed: boolean
+      is_pre_student: boolean
       city_id?: string | null
       university_id?: string | null
       school_id?: string | null
@@ -305,6 +312,7 @@ export default function Signup() {
       email: profileEmail,
       is_verified_student: false,
       onboarding_completed: true,
+      is_pre_student: studentType === 'pre-student',
     }
 
     if (studentType === 'student') {
@@ -319,7 +327,7 @@ export default function Signup() {
 
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert(profilePayload)
+      .upsert(profilePayload, { onConflict: 'id' })
 
     if (profileError) {
       const details = profileError.message ? ` (${profileError.message})` : ''
@@ -505,11 +513,8 @@ export default function Signup() {
         {studentType === 'pre-student' ? (
           <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
             <p>
-              Το προφίλ ως pre-student θα παραμείνει ενεργό για τρεις μήνες και
-              δεν θα μπορείς να χρησιμοποιήσεις ορισμένες λειτουργίες της
-              πλατφόρμας. Εφόσον αποκτήσεις φοιτητικό mail, επεξεργάσου το
-              προφίλ σου και ανανέωσε το mail σου ώστε πλέον να γίνεται verified.
-              Μετά τους τρεις μήνες, το προφίλ θα διαγραφεί αυτόματα.
+              Pre-student profiles stay active for 4 months unless you verify with a university email.
+              After 4 months, the profile is removed automatically.
             </p>
             <label className="flex items-start gap-2">
               <input
@@ -566,3 +571,4 @@ export default function Signup() {
     </section>
   )
 }
+

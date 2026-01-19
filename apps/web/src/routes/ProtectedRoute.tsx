@@ -6,6 +6,7 @@ type GuardState =
   | { status: 'loading' }
   | { status: 'unauthenticated' }
   | { status: 'needs-confirmation' }
+  | { status: 'needs-prestudent-setup' }
   | { status: 'needs-onboarding' }
   | { status: 'ready' }
   | { status: 'error'; message: string }
@@ -44,10 +45,14 @@ export default function ProtectedRoute() {
         return
       }
 
+      const metadataIsPreStudent =
+        session.user.user_metadata?.is_pre_student === true ||
+        session.user.user_metadata?.student_type === 'pre-student'
+
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id',
+          'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
         )
         .eq('id', session.user.id)
         .maybeSingle()
@@ -71,9 +76,10 @@ export default function ProtectedRoute() {
           .insert({
             id: session.user.id,
             is_verified_student: false,
+            is_pre_student: metadataIsPreStudent,
           })
           .select(
-            'onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id',
+            'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
           )
           .maybeSingle()
 
@@ -101,12 +107,58 @@ export default function ProtectedRoute() {
         return
       }
 
+      if (metadataIsPreStudent && resolvedProfile.is_pre_student !== true) {
+        const { data: updatedProfile, error: updateError } = await supabase
+          .from('profiles')
+          .update({ is_pre_student: true })
+          .eq('id', session.user.id)
+          .select(
+            'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
+          )
+          .maybeSingle()
+
+        if (!isMounted) return
+
+        if (updateError) {
+          const details = updateError.message
+            ? ` (${updateError.message})`
+            : ''
+          setGuardState({
+            status: 'error',
+            message: `Failed to update pre-student status.${details}`,
+          })
+          return
+        }
+
+        if (updatedProfile) {
+          resolvedProfile = updatedProfile
+        }
+      }
+
       const isMissingAcademic =
         !resolvedProfile.city_id ||
         !resolvedProfile.university_id ||
         !resolvedProfile.school_id
 
-      if (isMissingAcademic) {
+      const isPreStudent =
+        resolvedProfile.is_pre_student === true ||
+        metadataIsPreStudent ||
+        (isMissingAcademic &&
+          resolvedProfile.onboarding_completed === true &&
+          resolvedProfile.is_verified_student === false &&
+          resolvedProfile.university_email === null)
+
+      const needsPreStudentSetup =
+        isPreStudent &&
+        (!resolvedProfile.display_name ||
+          isMissingAcademic)
+
+      if (needsPreStudentSetup) {
+        setGuardState({ status: 'needs-prestudent-setup' })
+        return
+      }
+
+      if (isMissingAcademic && !isPreStudent) {
         setGuardState({ status: 'needs-confirmation' })
         return
       }
@@ -159,7 +211,7 @@ export default function ProtectedRoute() {
         }
       }
 
-      if (!resolvedProfile.onboarding_completed) {
+      if (!resolvedProfile.onboarding_completed && !isPreStudent) {
         setGuardState({ status: 'needs-onboarding' })
         return
       }
@@ -192,6 +244,13 @@ export default function ProtectedRoute() {
       return <Outlet />
     }
     return <Navigate to="/onboarding-confirm" replace />
+  }
+
+  if (guardState.status === 'needs-prestudent-setup') {
+    if (location.pathname === '/profile/edit') {
+      return <Outlet />
+    }
+    return <Navigate to="/profile/edit?setup=prestudent" replace />
   }
 
   if (guardState.status === 'needs-onboarding') {

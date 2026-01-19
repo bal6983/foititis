@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 type OptionItem = {
@@ -31,6 +31,8 @@ export default function ProfileEdit() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isPreStudentSetup = searchParams.get('setup') === 'prestudent'
   const redirectTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -230,7 +232,10 @@ export default function ProfileEdit() {
       universityId.trim() !== '' ||
       schoolId.trim() !== ''
 
-    if (hasAcademicSelection && (!cityId || !universityId || !schoolId)) {
+    if (
+      (isPreStudentSetup || hasAcademicSelection) &&
+      (!cityId || !universityId || !schoolId)
+    ) {
       setErrorMessage(
         'Συμπλήρωσε την πόλη, το πανεπιστήμιο και τη σχολή σου.',
       )
@@ -268,7 +273,7 @@ export default function ProfileEdit() {
     setIsSubmitting(false)
     setSuccessMessage('Το προφίλ ενημερώθηκε επιτυχώς.')
     redirectTimeoutRef.current = window.setTimeout(() => {
-      navigate('/profile')
+      navigate(isPreStudentSetup ? '/dashboard' : '/profile')
     }, 900)
   }
 
@@ -314,6 +319,7 @@ export default function ProfileEdit() {
             value={cityId}
             onChange={(event) => handleCityChange(event.target.value)}
             disabled={isLoadingCities}
+            required={isPreStudentSetup}
           >
             <option value="">Επίλεξε πόλη</option>
             {cities.map((city) => (
@@ -334,6 +340,7 @@ export default function ProfileEdit() {
             value={universityId}
             onChange={(event) => handleUniversityChange(event.target.value)}
             disabled={isUniversityDisabled}
+            required={isPreStudentSetup}
           >
             <option value="">Επίλεξε πανεπιστήμιο</option>
             {universities.map((university) => (
@@ -356,6 +363,7 @@ export default function ProfileEdit() {
             value={schoolId}
             onChange={(event) => setSchoolId(event.target.value)}
             disabled={isSchoolDisabled}
+            required={isPreStudentSetup}
           >
             <option value="">Επίλεξε σχολή</option>
             {schools.map((school) => (
