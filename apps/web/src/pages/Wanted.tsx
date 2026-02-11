@@ -15,6 +15,16 @@ type WantedListing = {
   created_at: string
 }
 
+type WantedListingQueryResult = Omit<WantedListing, 'categories' | 'locations'> & {
+  categories: { id: string; name: string }[] | { id: string; name: string } | null
+  locations: { id: string; name: string }[] | { id: string; name: string } | null
+}
+
+const firstOrSelf = <T,>(value: T[] | T | null): T | null => {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value
+}
+
 type CategoryOption = {
   id: string
   name: string
@@ -72,7 +82,7 @@ export default function Wanted() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setCategoriesErrorMessage(
-          `ƒœ¤ ã«˜¤ ›¬¤˜«ã ž ­æ¨«à©ž «à¤ ¡˜«žš¦¨ é¤.${details}`,
+          `Δεν ήταν δυνατή η φόρτωση των κατηγοριών.${details}`,
         )
         setIsLoadingCategories(false)
         return
@@ -106,7 +116,7 @@ export default function Wanted() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setLocationsErrorMessage(
-          `ƒœ¤ ã«˜¤ ›¬¤˜«ã ž ­æ¨«à©ž «à¤ «¦§¦Ÿœ© é¤.${details}`,
+          `Δεν ήταν δυνατή η φόρτωση των τοποθεσιών.${details}`,
         )
         setIsLoadingLocations(false)
         return
@@ -181,7 +191,14 @@ export default function Wanted() {
         return
       }
 
-      setListings(data ?? [])
+      const normalizedListings = ((data ?? []) as WantedListingQueryResult[]).map(
+        (item) => ({
+          ...item,
+          categories: firstOrSelf(item.categories),
+          locations: firstOrSelf(item.locations),
+        }),
+      )
+      setListings(normalizedListings)
       setIsLoading(false)
     }
 
@@ -318,14 +335,14 @@ export default function Wanted() {
       {!isLoading && !errorMessage && listings.length === 0 && !hasFilters ? (
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-center">
           <p className="text-sm text-slate-600">
-            ƒœ¤ ¬§á¨®¦¬¤ ˜¡æ£ž ˜ššœ¢åœª ã«ž©žª. ‚å¤œ ¦ §¨é«¦ª §¦¬ Ÿ˜ ž«ã©œ 
-            ¡á« .
+            Δεν υπάρχουν ακόμη αγγελίες ζήτησης. Γίνε ο πρώτος που θα ζητήσει
+            κάτι.
           </p>
           <Link
             className="mt-4 inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             to="/wanted/new"
           >
-            ƒž£ ¦ç¨šž©œ ã«ž©ž
+            Δημιούργησε ζήτηση
           </Link>
         </div>
       ) : null}

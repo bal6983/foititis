@@ -1,718 +1,406 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import BadgeGrid from '../components/gamification/BadgeGrid'
+import LevelCard from '../components/gamification/LevelCard'
+import MarketplaceCard from '../components/marketplace/MarketplaceCard'
+import SectionCard from '../components/ui/SectionCard'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
-
-type RecommendedProfileResult = {
-  profile_id: string
-  match_tier: number
-  school_id: string | null
-  university_id: string | null
-  city_id: string | null
-}
+import type { UnifiedMarketplaceItem } from '../components/marketplace/types'
 
 type ProfileSummary = {
+  id: string
   display_name: string | null
+  full_name: string | null
+  avatar_url: string | null
   is_verified_student: boolean | null
   is_pre_student: boolean | null
-  created_at: string | null
-  city_id: string | null
   university_id: string | null
-  school_id: string | null
 }
 
-type RecommendedProfileCard = {
+type ListingRow = {
   id: string
-  universityName: string
-  schoolName: string
-  displayName: string | null
-  studyYear: number | null
-  avatarUrl: string
-  isVerifiedStudent: boolean
-  isPreStudent: boolean
-  label: string
-  matchCount: number
-  orderIndex: number
-  schoolMatch: boolean
-  universityMatch: boolean
-  cityMatch: boolean
+  title: string
+  description: string
+  price: string
+  condition: string
+  category: string
+  created_at: string
+  seller_id: string
 }
 
-type MatchGroups = {
-  strongMatches: RecommendedProfileCard[]
-  mediumMatches: RecommendedProfileCard[]
-  weakMatches: RecommendedProfileCard[]
-}
-
-const emptyMatchGroups: MatchGroups = {
-  strongMatches: [],
-  mediumMatches: [],
-  weakMatches: [],
-}
-
-type MatchFilterId =
-  | 'all'
-  | 'schoolUniversityCity'
-  | 'schoolCity'
-  | 'universityCity'
-  | 'city'
-  | 'university'
-  | 'school'
-
-type AudienceFilterId = 'all' | 'prestudent' | 'students'
-
-const matchFilters: { id: MatchFilterId; label: string }[] = [
-  { id: 'all', label: 'Όλοι' },
-  {
-    id: 'schoolUniversityCity',
-    label: 'Ίδια σχολή + πανεπιστήμιο + πόλη',
-  },
-  { id: 'schoolCity', label: 'Ίδια σχολή + πόλη' },
-  { id: 'universityCity', label: 'Ίδιο πανεπιστήμιο + πόλη' },
-  { id: 'city', label: 'Ίδια πόλη' },
-  { id: 'university', label: 'Ίδιο πανεπιστήμιο' },
-  { id: 'school', label: 'Ίδια σχολή' },
-]
-
-const audienceFilters: { id: AudienceFilterId; label: string }[] = [
-  { id: 'prestudent', label: 'Pre-students' },
-  { id: 'students', label: 'Students' },
-]
-
-const getMatchLabel = (
-  schoolMatch: boolean,
-  universityMatch: boolean,
-  cityMatch: boolean,
-) => {
-  if (schoolMatch && universityMatch && cityMatch) {
-    return 'Ίδια σχολή, πανεπιστήμιο & πόλη'
-  }
-  if (schoolMatch && universityMatch) {
-    return 'Ίδια σχολή & πανεπιστήμιο'
-  }
-  if (schoolMatch && cityMatch) {
-    return 'Ίδια σχολή & πόλη'
-  }
-  if (universityMatch && cityMatch) {
-    return 'Ίδιο πανεπιστήμιο & πόλη'
-  }
-  if (schoolMatch) {
-    return 'Ίδια σχολή'
-  }
-  if (universityMatch) {
-    return 'Ίδιο πανεπιστήμιο'
-  }
-  if (cityMatch) {
-    return 'Ίδια πόλη'
-  }
-  return 'Διαφορετικά στοιχεία'
-}
-
-const getAvatarInitial = (value: string) =>
-  value.trim().charAt(0).toUpperCase() || '—'
-
-const getStatusBadge = (isPreStudent: boolean, isVerifiedStudent: boolean) => {
-  if (isVerifiedStudent) {
-    return { label: 'Verified', className: 'bg-emerald-100 text-emerald-700' }
-  }
-  return { label: 'Not verified', className: 'bg-rose-100 text-rose-700' }
-}
-
-const getCountdownLabel = (createdAt: string | null) => {
-  if (!createdAt) return ''
-  const created = new Date(createdAt)
-  if (Number.isNaN(created.getTime())) {
-    return ''
-  }
-  const expiresAt = new Date(created)
-  expiresAt.setMonth(expiresAt.getMonth() + 4)
-  const diffMs = expiresAt.getTime() - Date.now()
-  if (diffMs <= 0) {
-    return 'Έληξε'
-  }
-  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  return `${daysLeft} ημέρες`
+type WantedRow = {
+  id: string
+  title: string
+  description: string
+  category: string
+  created_at: string
+  user_id: string
 }
 
 export default function Dashboard() {
-  const [displayName, setDisplayName] = useState<string | null>(null)
-  const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
-  const [isPreStudent, setIsPreStudent] = useState(false)
-  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null)
+  const { t } = useI18n()
   const [profile, setProfile] = useState<ProfileSummary | null>(null)
-  const [recommendedResults, setRecommendedResults] = useState<
-    RecommendedProfileResult[] | null
-  >(null)
-  const [matchGroups, setMatchGroups] =
-    useState<MatchGroups>(emptyMatchGroups)
-  const [activeFilter, setActiveFilter] = useState<MatchFilterId>('all')
-  const [audienceFilter, setAudienceFilter] =
-    useState<AudienceFilterId>('all')
-  const defaultFiltersSetRef = useRef(false)
+  const [universityName, setUniversityName] = useState('')
+  const [previewItems, setPreviewItems] = useState<UnifiedMarketplaceItem[]>([])
+  const [sellCount, setSellCount] = useState(0)
+  const [wantCount, setWantCount] = useState(0)
+  const [mySellCount, setMySellCount] = useState(0)
+  const [myWantCount, setMyWantCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
 
-  const allCards = [
-    ...matchGroups.strongMatches,
-    ...matchGroups.mediumMatches,
-    ...matchGroups.weakMatches,
+  const announcements = [
+    t({
+      en: 'Department registration window closes this Friday.',
+      el: 'Η εγγραφή στα τμήματα κλείνει αυτή την Παρασκευή.',
+    }),
+    t({
+      en: 'Library night schedule is extended during exams.',
+      el: 'Το ωράριο της βιβλιοθήκης επεκτείνεται στην εξεταστική.',
+    }),
+    t({
+      en: 'Hackathon pre-registration opens next Monday.',
+      el: 'Οι προεγγραφές για το hackathon ανοίγουν την επόμενη Δευτέρα.',
+    }),
   ]
-
-  const matchesAudience = (card: RecommendedProfileCard) => {
-    if (audienceFilter === 'prestudent') {
-      return card.isPreStudent
-    }
-    if (audienceFilter === 'students') {
-      return card.isVerifiedStudent
-    }
-    return true
-  }
-
-  const filteredCards = allCards.filter((card) => {
-    if (!matchesAudience(card)) {
-      return false
-    }
-    switch (activeFilter) {
-      case 'schoolUniversityCity':
-        return card.schoolMatch && card.universityMatch && card.cityMatch
-      case 'schoolCity':
-        return card.schoolMatch && card.cityMatch
-      case 'universityCity':
-        return card.universityMatch && card.cityMatch
-      case 'city':
-        return card.cityMatch
-      case 'university':
-        return card.universityMatch
-      case 'school':
-        return card.schoolMatch
-      case 'all':
-      default:
-        return true
-    }
-  })
-
-  const cardsToShow = filteredCards.slice(0, 4)
-  const hasAnyResults = allCards.length > 0
-
-  useEffect(() => {
-    if (!isPreStudent || defaultFiltersSetRef.current) {
-      return
-    }
-
-    setActiveFilter('schoolCity')
-    setAudienceFilter('prestudent')
-    defaultFiltersSetRef.current = true
-  }, [isPreStudent])
 
   useEffect(() => {
     let isMounted = true
 
-    const loadUser = async () => {
+    const loadDashboard = async () => {
       setIsLoading(true)
-      setErrorMessage('')
+      setErrorMessage(null)
 
       const { data: userData, error: userError } = await supabase.auth.getUser()
-
       if (!isMounted) return
 
       if (userError || !userData.user) {
         const details = userError?.message ? ` (${userError.message})` : ''
-        setErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των δεδομένων.${details}`,
-        )
+        setErrorMessage({
+          en: `Unable to load dashboard.${details}`,
+          el: `Δεν ήταν δυνατή η φόρτωση του πίνακα.${details}`,
+        })
         setIsLoading(false)
         return
       }
+
+      const userId = userData.user.id
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'display_name, is_verified_student, is_pre_student, created_at, city_id, university_id, school_id',
+          'id, display_name, full_name, avatar_url, is_verified_student, is_pre_student, university_id',
         )
-        .eq('id', userData.user.id)
+        .eq('id', userId)
         .maybeSingle()
 
       if (!isMounted) return
 
-      if (profileError) {
-        const details = profileError.message ? ` (${profileError.message})` : ''
-        setErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των δεδομένων.${details}`,
-        )
-      }
-
-      const normalizedProfile: ProfileSummary = {
-        display_name: profileData?.display_name ?? null,
-        is_verified_student: profileData?.is_verified_student ?? null,
-        is_pre_student: profileData?.is_pre_student ?? null,
-        created_at: profileData?.created_at ?? null,
-        city_id: profileData?.city_id ?? null,
-        university_id: profileData?.university_id ?? null,
-        school_id: profileData?.school_id ?? null,
-      }
-
-      setProfile(normalizedProfile)
-      setDisplayName(normalizedProfile.display_name ?? null)
-      setIsVerifiedStudent(Boolean(normalizedProfile.is_verified_student))
-      setIsPreStudent(Boolean(normalizedProfile.is_pre_student))
-      setProfileCreatedAt(normalizedProfile.created_at ?? null)
-
-      const { data: recommendedData, error: recommendedError } =
-        await supabase.rpc('get_recommended_student_profiles', {
-          current_user_id: userData.user.id,
-          limit_per_tier: 4,
+      if (profileError || !profileData) {
+        const details = profileError?.message ? ` (${profileError.message})` : ''
+        setErrorMessage({
+          en: `Unable to load profile.${details}`,
+          el: `Δεν ήταν δυνατή η φόρτωση του προφίλ.${details}`,
         })
-
-      if (!isMounted) return
-
-      const rpcResults = recommendedData
-
-      if (recommendedError || !rpcResults) {
-        setMatchGroups(emptyMatchGroups)
-        setRecommendedResults(null)
         setIsLoading(false)
         return
       }
 
-      const results = rpcResults as RecommendedProfileResult[]
-      setRecommendedResults(results)
-    }
+      const typedProfile = profileData as ProfileSummary
+      setProfile(typedProfile)
+      let resolvedUniversityName = ''
 
-    loadUser()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!recommendedResults) {
-      return
-    }
-
-    let isMounted = true
-
-    const computeMatches = async () => {
-      setIsLoading(true)
-
-      const currentSchoolId = profile?.school_id ?? null
-      const currentUniversityId = profile?.university_id ?? null
-      const currentCityId = profile?.city_id ?? null
-      const results = recommendedResults
-
-      const schoolIds = Array.from(
-        new Set(results.map((item) => item.school_id).filter(Boolean)),
-      ) as string[]
-      const universityIds = Array.from(
-        new Set(results.map((item) => item.university_id).filter(Boolean)),
-      ) as string[]
-      const schoolMap = new Map<string, string>()
-      const universityMap = new Map<string, string>()
-      const profileIds = Array.from(
-        new Set(results.map((item) => item.profile_id).filter(Boolean)),
-      ) as string[]
-      const profileMap = new Map<
-        string,
-        {
-          displayName: string | null
-          studyYear: number | null
-          avatarUrl: string
-          isVerifiedStudent: boolean
-          isPreStudent: boolean
-        }
-      >()
-
-      if (schoolIds.length > 0) {
-        const { data: schoolsData } = await supabase
-          .from('schools')
-          .select('id, name')
-          .in('id', schoolIds)
-        schoolsData?.forEach((school) => {
-          schoolMap.set(school.id, school.name)
-        })
-      }
-
-      if (universityIds.length > 0) {
-        const { data: universitiesData } = await supabase
+      if (typedProfile.university_id) {
+        const { data: university } = await supabase
           .from('universities')
-          .select('id, name')
-          .in('id', universityIds)
-        universitiesData?.forEach((university) => {
-          universityMap.set(university.id, university.name)
-        })
-      }
-
-      if (profileIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('public_profiles')
-          .select(
-            'id, display_name, study_year, avatar_url, is_verified_student, is_pre_student',
-          )
-          .in('id', profileIds)
-        profilesData?.forEach((profileItem) => {
-          profileMap.set(profileItem.id, {
-            displayName: profileItem.display_name ?? null,
-            studyYear: profileItem.study_year ?? null,
-            avatarUrl: profileItem.avatar_url ?? '',
-            isVerifiedStudent: Boolean(profileItem.is_verified_student),
-            isPreStudent: Boolean(profileItem.is_pre_student),
-          })
-        })
-
-        if (profileMap.size === 0) {
-          await Promise.all(
-            profileIds.map(async (profileId) => {
-              const { data: profileItem } = await supabase
-                .from('public_profiles')
-                .select(
-                  'id, display_name, study_year, avatar_url, is_verified_student, is_pre_student',
-                )
-                .eq('id', profileId)
-                .maybeSingle()
-
-              if (profileItem) {
-                profileMap.set(profileItem.id, {
-                  displayName: profileItem.display_name ?? null,
-                  studyYear: profileItem.study_year ?? null,
-                  avatarUrl: profileItem.avatar_url ?? '',
-                  isVerifiedStudent: Boolean(profileItem.is_verified_student),
-                  isPreStudent: Boolean(profileItem.is_pre_student),
-                })
-              }
-            }),
-          )
+          .select('name')
+          .eq('id', typedProfile.university_id)
+          .maybeSingle()
+        if (isMounted && university?.name) {
+          resolvedUniversityName = university.name
+          setUniversityName(university.name)
         }
       }
+
+      const [
+        sellRowsResponse,
+        wantRowsResponse,
+        sellCountResponse,
+        wantCountResponse,
+        mySellCountResponse,
+        myWantCountResponse,
+      ] = await Promise.all([
+        supabase
+          .from('listings')
+          .select('id, title, description, price, condition, category, created_at, seller_id')
+          .order('created_at', { ascending: false })
+          .limit(4),
+        supabase
+          .from('wanted_listings')
+          .select('id, title, description, category, created_at, user_id')
+          .order('created_at', { ascending: false })
+          .limit(4),
+        supabase.from('listings').select('id', { count: 'exact', head: true }),
+        supabase.from('wanted_listings').select('id', { count: 'exact', head: true }),
+        supabase
+          .from('listings')
+          .select('id', { count: 'exact', head: true })
+          .eq('seller_id', userId),
+        supabase
+          .from('wanted_listings')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId),
+      ])
 
       if (!isMounted) return
 
-      const cards = results.map((item, index) => {
-        const schoolMatch =
-          currentSchoolId !== null && item.school_id === currentSchoolId
-        const universityMatch =
-          currentUniversityId !== null &&
-          item.university_id === currentUniversityId
-        const cityMatch =
-          currentCityId !== null && item.city_id === currentCityId
-        const matchCount = [schoolMatch, universityMatch, cityMatch].filter(
-          Boolean,
-        ).length
-        const profileInfo = profileMap.get(item.profile_id)
+      setSellCount(sellCountResponse.count ?? 0)
+      setWantCount(wantCountResponse.count ?? 0)
+      setMySellCount(mySellCountResponse.count ?? 0)
+      setMyWantCount(myWantCountResponse.count ?? 0)
 
-        return {
-          id: item.profile_id,
-          displayName: profileInfo?.displayName ?? null,
-          avatarUrl: profileInfo?.avatarUrl ?? '',
-          universityName: item.university_id
-            ? universityMap.get(item.university_id) ?? ''
-            : '',
-          schoolName: item.school_id ? schoolMap.get(item.school_id) ?? '' : '',
-          studyYear: profileInfo?.studyYear ?? null,
-          isVerifiedStudent: profileInfo?.isVerifiedStudent ?? false,
-          isPreStudent: profileInfo?.isPreStudent ?? false,
-          label: getMatchLabel(schoolMatch, universityMatch, cityMatch),
-          matchCount,
-          orderIndex: index,
-          schoolMatch,
-          universityMatch,
-          cityMatch,
-        }
-      })
+      const sellRows = (sellRowsResponse.data ?? []) as ListingRow[]
+      const wantRows = (wantRowsResponse.data ?? []) as WantedRow[]
 
-      const strongMatches = cards
-        .filter((card) => card.matchCount >= 2)
+      const mappedSell: UnifiedMarketplaceItem[] = sellRows.map((row) => ({
+        id: row.id,
+        ownerId: row.seller_id,
+        type: 'sell',
+        title: row.title,
+        description: row.description,
+        category: row.category,
+        condition: row.condition,
+        price: row.price,
+        universityName: resolvedUniversityName,
+        sellerName: typedProfile.display_name || typedProfile.full_name || t({ en: 'Student', el: 'Φοιτητής' }),
+        sellerLevel: 6,
+        sellerVerified: Boolean(typedProfile.is_verified_student),
+        createdAt: row.created_at,
+      }))
+
+      const mappedWant: UnifiedMarketplaceItem[] = wantRows.map((row) => ({
+        id: row.id,
+        ownerId: row.user_id,
+        type: 'want',
+        title: row.title,
+        description: row.description,
+        category: row.category,
+        condition: t({ en: 'Requested', el: 'Ζητείται' }),
+        price: null,
+        universityName: resolvedUniversityName,
+        sellerName: typedProfile.display_name || typedProfile.full_name || t({ en: 'Student', el: 'Φοιτητής' }),
+        sellerLevel: 4,
+        sellerVerified: Boolean(typedProfile.is_verified_student),
+        createdAt: row.created_at,
+      }))
+
+      const merged = [...mappedSell, ...mappedWant]
         .sort(
           (a, b) =>
-            b.matchCount - a.matchCount || a.orderIndex - b.orderIndex,
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         )
-      const mediumMatches = cards
-        .filter((card) => card.matchCount === 1)
-        .sort((a, b) => a.orderIndex - b.orderIndex)
-      const weakMatches = cards
-        .filter((card) => card.matchCount === 0)
-        .sort((a, b) => a.orderIndex - b.orderIndex)
+        .slice(0, 4)
 
-      setMatchGroups({
-        strongMatches,
-        mediumMatches,
-        weakMatches,
-      })
+      setPreviewItems(merged)
       setIsLoading(false)
     }
 
-    computeMatches()
+    loadDashboard()
 
     return () => {
       isMounted = false
     }
-  }, [profile, recommendedResults])
+  }, [t])
 
-  const greetingName = displayName ?? 'Χρήστης'
-  const hasGreetingName = greetingName.trim().length > 0
-  const statusIndicator = isVerifiedStudent
-    ? { label: 'V', className: 'text-purple-500' }
-    : isPreStudent
-      ? { label: 'pS', className: 'text-red-500' }
-      : { label: 'S', className: 'text-slate-500' }
-  const countdownLabel = isPreStudent
-    ? getCountdownLabel(profileCreatedAt)
-    : ''
+  const isVerified = Boolean(profile?.is_verified_student)
+  const isPreStudent = Boolean(profile?.is_pre_student) && !isVerified
+  const displayName =
+    profile?.display_name || profile?.full_name || t({ en: 'Student', el: 'Φοιτητής' })
+
+  const totalXp = useMemo(() => {
+    const base = 280 + mySellCount * 55 + myWantCount * 35
+    return isVerified ? base + 220 : base
+  }, [isVerified, mySellCount, myWantCount])
+
+  const unlockedBadgeIds = useMemo(() => {
+    if (!isVerified) return []
+    const badges = ['verified-student']
+    if (mySellCount >= 1) badges.push('trusted-seller')
+    if (mySellCount >= 5) badges.push('ten-trades')
+    if (myWantCount >= 1) badges.push('helpful-member')
+    if (mySellCount + myWantCount >= 3) badges.push('active-this-month')
+    return badges
+  }, [isVerified, mySellCount, myWantCount])
 
   if (isLoading) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">
-          Φορτώνουμε τις προτάσεις σου...
-        </h1>
-        <p className="text-sm text-slate-600">
-          Περίμενε λίγο όσο ετοιμάζουμε τα προτεινόμενα προφίλ.
+        <h1 className="text-xl font-semibold">{t({ en: 'Loading dashboard...', el: 'Φόρτωση πίνακα...' })}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {t({ en: 'Preparing your student workspace.', el: 'Ετοιμάζουμε τον χώρο σου.' })}
         </p>
       </section>
     )
   }
 
   return (
-    <section className="space-y-8">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold flex flex-wrap items-center gap-2">
-          {hasGreetingName ? (
-            <>
-              <span>Γεια σου,</span>
-              <span className="inline-flex items-center gap-2">
-                <span className="break-all">{greetingName}</span>
-                <span
-                  className={`inline-flex h-5 w-5 items-center justify-center border border-slate-300/70 bg-transparent text-[9px] font-semibold leading-none [clip-path:polygon(25%_6%,_75%_6%,_100%_50%,_75%_94%,_25%_94%,_0%_50%)] ${statusIndicator.className}`}
-                  aria-hidden="true"
-                >
-                  {statusIndicator.label}
-                </span>
-              </span>
-            </>
-          ) : (
-            <span>Γεια σου!</span>
-          )}
-        </h1>
-        <p className="text-sm text-slate-600">
-          Βρες νέους φοιτητές που ταιριάζουν στο προφίλ σου.
-        </p>
+    <section className="space-y-4">
+      <header className="glass-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+              {displayName}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {(universityName || t({ en: 'University', el: 'Πανεπιστήμιο' }))} •{' '}
+              {t({ en: 'Student Utility Workspace', el: 'Χώρος Εργαλείων Φοιτητή' })}
+            </p>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+              isVerified
+                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                : 'border-amber-400/40 bg-amber-500/15 text-amber-100'
+            }`}
+          >
+            {isVerified
+              ? t({ en: 'Verified Student', el: 'Επαληθευμένος φοιτητής' })
+              : t({ en: 'Pre-student', el: 'Pre-student' })}
+          </span>
+        </div>
       </header>
 
-      {isPreStudent && countdownLabel ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="font-semibold">Αντίστροφη μέτρηση pre-student</p>
-          <p className="mt-1 text-amber-800">Χρόνος που απομένει: {countdownLabel}</p>
-        </div>
-      ) : null}
-
       {errorMessage ? (
-        <p className="text-sm text-rose-600">{errorMessage}</p>
+        <p className="rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          {t(errorMessage)}
+        </p>
       ) : null}
 
-      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">
-              Προτεινόμενοι φοιτητές για εσένα
-            </h2>
-            <p className="text-xs text-slate-500">
-              Φιλτράρε με βάση τα κοινά στοιχεία σου.
+      <SectionCard
+        title={t({ en: 'Marketplace Overview', el: 'Επισκόπηση Marketplace' })}
+        subtitle={t({
+          en: 'Unified marketplace activity across selling and searching.',
+          el: 'Ενοποιημένη δραστηριότητα για πώληση και αναζήτηση.',
+        })}
+        action={
+          <Link
+            to="/marketplace"
+            className="rounded-full border border-[var(--border-primary)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            {t({ en: 'Open Marketplace', el: 'Άνοιγμα Marketplace' })}
+          </Link>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <article className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] p-3">
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t({ en: 'For Sale', el: 'Προς Πώληση' })}
             </p>
-          </div>
-          {hasAnyResults ? (
-            <Link
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              to="/students"
-            >
-              Δες όλους τους φοιτητές
-            </Link>
-          ) : null}
+            <p className="mt-1 text-xl font-semibold">{sellCount}</p>
+          </article>
+          <article className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] p-3">
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t({ en: 'Looking For', el: 'Αναζήτηση' })}
+            </p>
+            <p className="mt-1 text-xl font-semibold">{wantCount}</p>
+          </article>
+          <article className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] p-3">
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t({ en: 'My Listings', el: 'Οι αγγελίες μου' })}
+            </p>
+            <p className="mt-1 text-xl font-semibold">{mySellCount + myWantCount}</p>
+          </article>
         </div>
 
-        {isPreStudent && hasAnyResults ? (
-          <div className="flex flex-wrap gap-2">
-            {audienceFilters.map((filter) => {
-              const isActive = audienceFilter === filter.id
-              return (
-                <button
-                  key={filter.id}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                    isActive
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                  type="button"
-                  onClick={() => setAudienceFilter(filter.id)}
-                >
-                  {filter.label}
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
-
-        {hasAnyResults ? (
-          <div className="flex flex-wrap gap-2">
-            {matchFilters.map((filter) => {
-              const isActive = activeFilter === filter.id
-              return (
-                <button
-                  key={filter.id}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                    isActive
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                  type="button"
-                  onClick={() => setActiveFilter(filter.id)}
-                >
-                  {filter.label}
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
-
-        {cardsToShow.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {cardsToShow.map((profileItem) => {
-              const statusBadge = getStatusBadge(
-                profileItem.isPreStudent,
-                profileItem.isVerifiedStudent,
-              )
-              return (
-              <div
-                key={profileItem.id}
-                className="relative rounded-lg border border-slate-200 bg-slate-50 p-3"
-              >
-                  <span
-                    className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.className}`}
-                  >
-                    {statusBadge.label}
-                  </span>
-                <div className="mb-2 flex items-center gap-3">
-                  <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500">
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      {getAvatarInitial(profileItem.displayName ?? 'Χρήστης')}
-                    </span>
-                    {profileItem.avatarUrl ? (
-                      <img
-                        alt={profileItem.displayName ?? 'Χρήστης'}
-                        className="relative h-10 w-10 rounded-full object-cover"
-                        src={profileItem.avatarUrl}
-                        onError={(event) => {
-                          event.currentTarget.style.display = 'none'
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {profileItem.displayName ?? 'Χρήστης'}
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Πανεπιστήμιο: {profileItem.universityName || '—'}
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Σχολή: {profileItem.schoolName || '—'}
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Έτος φοίτησης: {profileItem.studyYear ?? '—'}
-                  </p>
-                </div>
-                <p className="mt-2 text-xs font-semibold text-slate-500">
-                  Ταίριασμα: {profileItem.label}
-                </p>
-                <Link
-                  className="mt-3 inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  to={`/profile/${profileItem.id}`}
-                >
-                  Δες προφίλ
-                </Link>
-              </div>
-            )})}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              {hasAnyResults
-                ? 'Δεν υπάρχουν φοιτητές για αυτό το φίλτρο.'
-                : 'Δεν υπάρχουν ακόμη φοιτητές με παρόμοια στοιχεία.'}
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {previewItems.length > 0 ? (
+            previewItems.map((item) => <MarketplaceCard key={`${item.type}-${item.id}`} item={item} />)
+          ) : (
+            <p className="text-sm text-[var(--text-secondary)]">
+              {t({ en: 'No marketplace activity yet.', el: 'Δεν υπάρχει δραστηριότητα ακόμα.' })}
             </p>
-            {!hasAnyResults ? (
-              <Link
-                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                to="/students"
-              >
-                Δες όλους τους φοιτητές
-              </Link>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title={t({ en: 'Activity Summary', el: 'Σύνοψη Δραστηριότητας' })}
+        subtitle={t({ en: 'XP progress and badge momentum.', el: 'Πρόοδος XP και σήματα.' })}
+      >
+        <div className="space-y-4">
+          <div className={isPreStudent ? 'relative' : ''}>
+            <div className={isPreStudent ? 'opacity-55 blur-[1px]' : ''}>
+              <LevelCard
+                name={displayName}
+                avatarUrl={profile?.avatar_url}
+                totalXp={totalXp}
+              />
+            </div>
+            {isPreStudent ? (
+              <p className="absolute inset-0 grid place-items-center text-center text-xs font-semibold text-amber-100">
+                {t({
+                  en: 'Verify your university email to unlock full features.',
+                  el: 'Επαλήθευσε το πανεπιστημιακό email για πλήρη πρόσβαση.',
+                })}
+              </p>
             ) : null}
           </div>
-        )}
-      </section>
+          <BadgeGrid
+            unlockedBadgeIds={unlockedBadgeIds}
+            lockedReason={t({
+              en: 'Verify your university email to unlock full features.',
+              el: 'Επαλήθευσε το πανεπιστημιακό email για πλήρη πρόσβαση.',
+            })}
+          />
+        </div>
+      </SectionCard>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">Marketplace</h2>
-            <p className="text-sm text-slate-600">
-              Βρες αγγελίες για σημειώσεις, βιβλία και μεταχειρισμένα.
-            </p>
-          </div>
-          <Link
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            to="/marketplace"
-          >
-            Εξερεύνησε
-          </Link>
-        </section>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <SectionCard
+          title={t({ en: 'University Announcements', el: 'Ανακοινώσεις Πανεπιστημίου' })}
+          subtitle={t({
+            en: 'Static placeholder area for institutional updates.',
+            el: 'Ενδεικτικός χώρος για ενημερώσεις ιδρύματος.',
+          })}
+        >
+          <ul className="space-y-2">
+            {announcements.map((announcement) => (
+              <li
+                key={announcement}
+                className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-secondary)]"
+              >
+                {announcement}
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
 
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">Νέα</h2>
-            <p className="text-sm text-slate-600">
-              Δες ενημερώσεις για νέα από την κοινότητα.
-            </p>
+        <SectionCard
+          title={t({ en: 'Quick Actions', el: 'Γρήγορες Ενέργειες' })}
+          subtitle={t({ en: 'Move fast across key workflows.', el: 'Μετακινήσου γρήγορα στις βασικές ροές.' })}
+        >
+          <div className="grid gap-2">
+            <Link
+              to="/marketplace?create=sell"
+              className="rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-center text-sm font-semibold text-slate-950"
+            >
+              {t({ en: 'List Item', el: 'Πώληση Αντικειμένου' })}
+            </Link>
+            <Link
+              to="/marketplace?create=want"
+              className="rounded-xl border border-[var(--border-primary)] px-4 py-2 text-center text-sm font-semibold text-[var(--text-primary)]"
+            >
+              {t({ en: 'Request Item', el: 'Αναζήτηση Αντικειμένου' })}
+            </Link>
+            <Link
+              to="/marketplace?mine=1"
+              className="rounded-xl border border-[var(--border-primary)] px-4 py-2 text-center text-sm font-semibold text-[var(--text-primary)]"
+            >
+              {t({ en: 'View My Listings', el: 'Οι αγγελίες μου' })}
+            </Link>
           </div>
-          <button
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400"
-            type="button"
-            disabled
-          >
-            Σύντομα
-          </button>
-        </section>
-
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">Εκδηλώσεις</h2>
-            <p className="text-sm text-slate-600">
-              Βρες εκδηλώσεις για όλους τους φοιτητές.
-            </p>
-          </div>
-          <button
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400"
-            type="button"
-            disabled
-          >
-            Σύντομα
-          </button>
-        </section>
-
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">Μηνύματα / Chat</h2>
-            <p className="text-sm text-slate-600">
-              Σύντομα θα μπορείς να στέλνεις μηνύματα σε άλλους φοιτητές.
-            </p>
-          </div>
-          <button
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400"
-            type="button"
-            disabled
-          >
-            Σύντομα
-          </button>
-        </section>
+        </SectionCard>
       </div>
     </section>
   )

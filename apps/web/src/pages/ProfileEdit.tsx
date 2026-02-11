@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -12,6 +12,7 @@ function uniqueById<T extends { id: string }>(items: T[]) {
 }
 
 export default function ProfileEdit() {
+  const [fullName, setFullName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [cityId, setCityId] = useState('')
   const [universityId, setUniversityId] = useState('')
@@ -173,7 +174,7 @@ export default function ProfileEdit() {
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('display_name, city_id, university_id, school_id')
+        .select('full_name, display_name, city_id, university_id, school_id')
         .eq('id', userData.user.id)
         .maybeSingle()
 
@@ -186,6 +187,7 @@ export default function ProfileEdit() {
         return
       }
 
+      setFullName(profile.full_name ?? '')
       setDisplayName(profile.display_name ?? '')
       setCityId(profile.city_id ?? '')
       setUniversityId(profile.university_id ?? '')
@@ -220,7 +222,13 @@ export default function ProfileEdit() {
     setErrorMessage('')
     setSuccessMessage('')
 
+    const trimmedFullName = fullName.trim()
     const trimmedDisplayName = displayName.trim()
+
+    if (!trimmedFullName) {
+      setErrorMessage('Το ονοματεπώνυμο είναι υποχρεωτικό.')
+      return
+    }
 
     if (!trimmedDisplayName) {
       setErrorMessage('Το όνομα εμφάνισης είναι υποχρεωτικό.')
@@ -256,6 +264,7 @@ export default function ProfileEdit() {
     const { error } = await supabase
       .from('profiles')
       .update({
+        full_name: trimmedFullName,
         display_name: trimmedDisplayName,
         city_id: cityId || null,
         university_id: universityId || null,
@@ -301,6 +310,17 @@ export default function ProfileEdit() {
       </header>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
+        <label className="block space-y-1 text-sm font-medium">
+          Ονοματεπώνυμο
+          <input
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            type="text"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            required
+          />
+        </label>
+
         <label className="block space-y-1 text-sm font-medium">
           Όνομα εμφάνισης
           <input

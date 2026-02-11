@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
+import { type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 export type VerificationStatus = 'loading' | 'verified' | 'unverified' | 'error'
 
 export type VerificationResult = {
   status: VerificationStatus
-  errorMessage: string
+  errorMessage: LocalizedMessage | null
 }
 
 export default function useVerificationStatus(): VerificationResult {
   const [status, setStatus] = useState<VerificationStatus>('loading')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -22,7 +23,10 @@ export default function useVerificationStatus(): VerificationResult {
 
       if (userError || !userData.user) {
         const details = userError?.message ? ` (${userError.message})` : ''
-        setErrorMessage(`Πρέπει να συνδεθείς για να συνεχίσεις.${details}`)
+        setErrorMessage({
+          en: `You need to sign in to continue.${details}`,
+          el: `Πρέπει να συνδεθείς για να συνεχίσεις.${details}`,
+        })
         setStatus('error')
         return
       }
@@ -37,7 +41,10 @@ export default function useVerificationStatus(): VerificationResult {
 
       if (profileError || !profile) {
         const details = profileError?.message ? ` (${profileError.message})` : ''
-        setErrorMessage(`Δεν βρέθηκε προφίλ.${details}`)
+        setErrorMessage({
+          en: `Profile not found.${details}`,
+          el: `Δεν βρέθηκε προφίλ.${details}`,
+        })
         setStatus('error')
         return
       }

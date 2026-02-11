@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 type GuardState =
@@ -9,9 +10,10 @@ type GuardState =
   | { status: 'needs-prestudent-setup' }
   | { status: 'needs-onboarding' }
   | { status: 'ready' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: LocalizedMessage }
 
 export default function ProtectedRoute() {
+  const { t } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const [guardState, setGuardState] = useState<GuardState>({
@@ -33,7 +35,10 @@ export default function ProtectedRoute() {
         const details = sessionError.message ? ` (${sessionError.message})` : ''
         setGuardState({
           status: 'error',
-          message: `Σφάλμα σύνδεσης.${details}`,
+          message: {
+            en: `Login error.${details}`,
+            el: `Σφάλμα σύνδεσης.${details}`,
+          },
         })
         return
       }
@@ -63,7 +68,10 @@ export default function ProtectedRoute() {
         const details = profileError?.message ? ` (${profileError.message})` : ''
         setGuardState({
           status: 'error',
-          message: `Δεν ήταν δυνατή η φόρτωση προφίλ.${details}`,
+          message: {
+            en: `Unable to load profile.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση προφίλ.${details}`,
+          },
         })
         return
       }
@@ -86,12 +94,13 @@ export default function ProtectedRoute() {
         if (!isMounted) return
 
         if (createError || !createdProfile) {
-          const details = createError?.message
-            ? ` (${createError.message})`
-            : ''
+          const details = createError?.message ? ` (${createError.message})` : ''
           setGuardState({
             status: 'error',
-            message: `Н?Н?Н? Н?О?НёН? Н?О?Н?НёО?Н? Н· О?О?О?О?О?О?Н· О?О?НЁО?Н?Н?.${details}`,
+            message: {
+              en: `Unable to create profile.${details}`,
+              el: `Δεν ήταν δυνατή η δημιουργία προφίλ.${details}`,
+            },
           })
           return
         }
@@ -102,12 +111,39 @@ export default function ProtectedRoute() {
       if (!resolvedProfile) {
         setGuardState({
           status: 'error',
-          message: `Н?Н?Н? Н?О?НёН? Н?О?Н?НёО?Н? Н· О?О?О?О?О?О?Н· О?О?НЁО?Н?Н?.`,
+          message: {
+            en: 'Unable to create profile.',
+            el: 'Δεν ήταν δυνατή η δημιουργία προφίλ.',
+          },
         })
         return
       }
 
-      if (metadataIsPreStudent && resolvedProfile.is_pre_student !== true) {
+      if (
+        resolvedProfile.is_verified_student === true &&
+        resolvedProfile.is_pre_student === true
+      ) {
+        const { data: normalizedProfile } = await supabase
+          .from('profiles')
+          .update({ is_pre_student: false })
+          .eq('id', session.user.id)
+          .select(
+            'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
+          )
+          .maybeSingle()
+
+        if (!isMounted) return
+
+        if (normalizedProfile) {
+          resolvedProfile = normalizedProfile
+        }
+      }
+
+      if (
+        metadataIsPreStudent &&
+        resolvedProfile.is_verified_student !== true &&
+        resolvedProfile.is_pre_student !== true
+      ) {
         const { data: updatedProfile, error: updateError } = await supabase
           .from('profiles')
           .update({ is_pre_student: true })
@@ -120,12 +156,13 @@ export default function ProtectedRoute() {
         if (!isMounted) return
 
         if (updateError) {
-          const details = updateError.message
-            ? ` (${updateError.message})`
-            : ''
+          const details = updateError.message ? ` (${updateError.message})` : ''
           setGuardState({
             status: 'error',
-            message: `Failed to update pre-student status.${details}`,
+            message: {
+              en: `Failed to update pre-student status.${details}`,
+              el: `Δεν ήταν δυνατή η ενημέρωση του pre-student.${details}`,
+            },
           })
           return
         }
@@ -141,17 +178,16 @@ export default function ProtectedRoute() {
         !resolvedProfile.school_id
 
       const isPreStudent =
-        resolvedProfile.is_pre_student === true ||
-        metadataIsPreStudent ||
-        (isMissingAcademic &&
-          resolvedProfile.onboarding_completed === true &&
-          resolvedProfile.is_verified_student === false &&
-          resolvedProfile.university_email === null)
+        resolvedProfile.is_verified_student === true
+          ? false
+          : resolvedProfile.is_pre_student === true ||
+            metadataIsPreStudent ||
+            (isMissingAcademic &&
+              resolvedProfile.onboarding_completed === true &&
+              resolvedProfile.is_verified_student === false &&
+              resolvedProfile.university_email === null)
 
-      const needsPreStudentSetup =
-        isPreStudent &&
-        (!resolvedProfile.display_name ||
-          isMissingAcademic)
+      const needsPreStudentSetup = isPreStudent && isMissingAcademic
 
       if (needsPreStudentSetup) {
         setGuardState({ status: 'needs-prestudent-setup' })
@@ -188,7 +224,7 @@ export default function ProtectedRoute() {
               await supabase
                 .from('profiles')
                 .select(
-                  'onboarding_completed, is_verified_student, university_email',
+                  'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
                 )
                 .eq('id', session.user.id)
                 .maybeSingle()
@@ -211,6 +247,17 @@ export default function ProtectedRoute() {
         }
       }
 
+      if (!resolvedProfile) {
+        setGuardState({
+          status: 'error',
+          message: {
+            en: 'Unable to load profile.',
+            el: 'Δεν ήταν δυνατή η φόρτωση προφίλ.',
+          },
+        })
+        return
+      }
+
       if (!resolvedProfile.onboarding_completed && !isPreStudent) {
         setGuardState({ status: 'needs-onboarding' })
         return
@@ -229,8 +276,10 @@ export default function ProtectedRoute() {
   if (guardState.status === 'loading') {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Φόρτωση</h1>
-        <p className="text-sm text-slate-600">Έλεγχος σύνδεσης...</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Loading', el: 'Φόρτωση' })}</h1>
+        <p className="text-sm text-slate-600">
+          {t({ en: 'Checking sign-in...', el: 'Έλεγχος σύνδεσης...' })}
+        </p>
       </section>
     )
   }
@@ -247,10 +296,10 @@ export default function ProtectedRoute() {
   }
 
   if (guardState.status === 'needs-prestudent-setup') {
-    if (location.pathname === '/profile/edit') {
+    if (location.pathname === '/onboarding-confirm') {
       return <Outlet />
     }
-    return <Navigate to="/profile/edit?setup=prestudent" replace />
+    return <Navigate to="/onboarding-confirm" replace />
   }
 
   if (guardState.status === 'needs-onboarding') {
@@ -271,8 +320,10 @@ export default function ProtectedRoute() {
   if (guardState.status === 'error') {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Δεν ήταν δυνατή η φόρτωση</h1>
-        <p className="text-sm text-slate-600">{guardState.message}</p>
+        <h1 className="text-xl font-semibold">
+          {t({ en: 'Unable to load', el: 'Δεν ήταν δυνατή η φόρτωση' })}
+        </h1>
+        <p className="text-sm text-slate-600">{t(guardState.message)}</p>
       </section>
     )
   }

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -39,7 +39,39 @@ export default function WantedCreate() {
   const [isLoadingLocations, setIsLoadingLocations] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPreStudent, setIsPreStudent] = useState(false)
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAccess = async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!isMounted) return
+
+      if (userData.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_pre_student, is_verified_student')
+          .eq('id', userData.user.id)
+          .maybeSingle()
+
+        if (!isMounted) return
+        setIsPreStudent(
+          Boolean(profile?.is_pre_student) && !Boolean(profile?.is_verified_student),
+        )
+      }
+
+      setIsCheckingAccess(false)
+    }
+
+    checkAccess()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -166,6 +198,42 @@ export default function WantedCreate() {
 
     setIsSubmitting(false)
     navigate('/wanted')
+  }
+
+  if (isCheckingAccess) {
+    return (
+      <section className="space-y-2">
+        <h1 className="text-xl font-semibold">Φόρτωση...</h1>
+        <p className="text-sm text-slate-600">Έλεγχος πρόσβασης.</p>
+      </section>
+    )
+  }
+
+  if (isPreStudent) {
+    return (
+      <section className="space-y-6">
+        <header className="space-y-2">
+          <Link className="text-sm font-semibold text-slate-600" to="/wanted">
+            Πίσω στις αγγελίες ζήτησης
+          </Link>
+          <h1 className="text-2xl font-semibold">Νέα αγγελία ζήτησης</h1>
+        </header>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+          <p className="font-semibold">
+            Μόνο επαληθευμένοι φοιτητές μπορούν να δημιουργήσουν αγγελίες ζήτησης.
+          </p>
+          <p className="mt-2 text-amber-800">
+            Ολοκλήρωσε την επαλήθευση του πανεπιστημιακού σου email για να αποκτήσεις πρόσβαση.
+          </p>
+          <Link
+            className="mt-3 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            to="/verification"
+          >
+            Μετάβαση στην επαλήθευση
+          </Link>
+        </div>
+      </section>
+    )
   }
 
   return (

@@ -20,6 +20,20 @@ type MarketplaceListing = {
   profiles: { display_name: string | null } | null
 }
 
+type MarketplaceListingQueryResult = Omit<
+  MarketplaceListing,
+  'locations' | 'categories' | 'profiles'
+> & {
+  locations: { id: string; name: string }[] | { id: string; name: string } | null
+  categories: { id: string; name: string }[] | { id: string; name: string } | null
+  profiles: { display_name: string | null }[] | { display_name: string | null } | null
+}
+
+const firstOrSelf = <T,>(value: T[] | T | null): T | null => {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value
+}
+
 const conditionLabels: Record<number, string> = {
   1: 'Πολύ κακή',
   2: 'Κακή',
@@ -85,7 +99,13 @@ export default function MarketplaceDetail() {
         return
       }
 
-      setListing(data)
+      const listingData = data as MarketplaceListingQueryResult
+      setListing({
+        ...listingData,
+        locations: firstOrSelf(listingData.locations),
+        categories: firstOrSelf(listingData.categories),
+        profiles: firstOrSelf(listingData.profiles),
+      })
       setIsLoading(false)
     }
 

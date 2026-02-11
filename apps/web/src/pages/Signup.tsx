@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 type OptionItem = {
@@ -43,7 +44,13 @@ const persistOnboardingConfirmData = (data: OnboardingConfirmStorage) => {
   }
 }
 
+const withDetails = (message: LocalizedMessage, details?: string): LocalizedMessage => ({
+  en: `${message.en}${details ?? ''}`,
+  el: `${message.el}${details ?? ''}`,
+})
+
 export default function Signup() {
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [studentType, setStudentType] = useState('')
@@ -57,10 +64,10 @@ export default function Signup() {
   const [isLoadingCities, setIsLoadingCities] = useState(true)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
   const [isLoadingSchools, setIsLoadingSchools] = useState(false)
-  const [citiesErrorMessage, setCitiesErrorMessage] = useState('')
-  const [universitiesErrorMessage, setUniversitiesErrorMessage] = useState('')
-  const [schoolsErrorMessage, setSchoolsErrorMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [citiesErrorMessage, setCitiesErrorMessage] = useState<LocalizedMessage | null>(null)
+  const [universitiesErrorMessage, setUniversitiesErrorMessage] = useState<LocalizedMessage | null>(null)
+  const [schoolsErrorMessage, setSchoolsErrorMessage] = useState<LocalizedMessage | null>(null)
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
   const [showEmailConfirmationMessage, setShowEmailConfirmationMessage] =
     useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -71,7 +78,7 @@ export default function Signup() {
 
     const loadCities = async () => {
       setIsLoadingCities(true)
-      setCitiesErrorMessage('')
+      setCitiesErrorMessage(null)
 
       const { data, error } = await supabase
         .from('cities')
@@ -83,7 +90,13 @@ export default function Signup() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setCitiesErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των πόλεων.${details}`,
+          withDetails(
+            {
+              en: 'Unable to load cities.',
+              el: 'Δεν ήταν δυνατή η φόρτωση των πόλεων.',
+            },
+            details,
+          ),
         )
         setIsLoadingCities(false)
         return
@@ -111,7 +124,7 @@ export default function Signup() {
 
     const loadUniversities = async () => {
       setIsLoadingUniversities(true)
-      setUniversitiesErrorMessage('')
+      setUniversitiesErrorMessage(null)
 
       const { data, error } = await supabase
         .from('universities')
@@ -124,7 +137,13 @@ export default function Signup() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setUniversitiesErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των πανεπιστημίων.${details}`,
+          withDetails(
+            {
+              en: 'Unable to load universities.',
+              el: 'Δεν ήταν δυνατή η φόρτωση των πανεπιστημίων.',
+            },
+            details,
+          ),
         )
         setIsLoadingUniversities(false)
         return
@@ -152,7 +171,7 @@ export default function Signup() {
 
     const loadSchools = async () => {
       setIsLoadingSchools(true)
-      setSchoolsErrorMessage('')
+      setSchoolsErrorMessage(null)
 
       const { data, error } = await supabase
         .from('schools')
@@ -165,7 +184,13 @@ export default function Signup() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setSchoolsErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των σχολών.${details}`,
+          withDetails(
+            {
+              en: 'Unable to load schools.',
+              el: 'Δεν ήταν δυνατή η φόρτωση των σχολών.',
+            },
+            details,
+          ),
         )
         setIsLoadingSchools(false)
         return
@@ -208,7 +233,7 @@ export default function Signup() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setErrorMessage('')
+    setErrorMessage(null)
     setShowEmailConfirmationMessage(false)
     if (isStudentEmailDomainMismatch) {
       return
@@ -216,21 +241,28 @@ export default function Signup() {
     setIsSubmitting(true)
 
     if (!studentType) {
-      setErrorMessage('Επίλεξε αν είσαι φοιτητής ή pre-student.')
+      setErrorMessage({
+        en: 'Select whether you are a student or pre-student.',
+        el: 'Επίλεξε αν είσαι φοιτητής ή pre-student.',
+      })
       setIsSubmitting(false)
       return
     }
 
     if (studentType === 'student' && (!cityId || !universityId || !schoolId)) {
-      setErrorMessage(
-        'Συμπλήρωσε την πόλη, το πανεπιστήμιο και τη σχολή σου.',
-      )
+      setErrorMessage({
+        en: 'Fill in your city, university, and school.',
+        el: 'Συμπλήρωσε την πόλη, το πανεπιστήμιο και τη σχολή σου.',
+      })
       setIsSubmitting(false)
       return
     }
 
     if (studentType === 'pre-student' && !preStudentAcknowledged) {
-      setErrorMessage('Πρέπει να επιβεβαιώσεις ότι διάβασες το μήνυμα.')
+      setErrorMessage({
+        en: 'You must acknowledge the message.',
+        el: 'Πρέπει να επιβεβαιώσεις ότι διάβασες το μήνυμα.',
+      })
       setIsSubmitting(false)
       return
     }
@@ -263,7 +295,15 @@ export default function Signup() {
 
     if (error || !data.user) {
       const details = error?.message ? ` (${error.message})` : ''
-      setErrorMessage(`Δεν ήταν δυνατή η δημιουργία λογαριασμού.${details}`)
+      setErrorMessage(
+        withDetails(
+          {
+            en: 'Unable to create account.',
+            el: 'Δεν ήταν δυνατή η δημιουργία λογαριασμού.',
+          },
+          details,
+        ),
+      )
       setIsSubmitting(false)
       return
     }
@@ -291,7 +331,15 @@ export default function Signup() {
         const details = signInError?.message
           ? ` (${signInError.message})`
           : ''
-        setErrorMessage(`Δεν ήταν δυνατή η σύνδεση.${details}`)
+        setErrorMessage(
+          withDetails(
+            {
+              en: 'Unable to sign in.',
+              el: 'Δεν ήταν δυνατή η σύνδεση.',
+            },
+            details,
+          ),
+        )
         setIsSubmitting(false)
         return
       }
@@ -332,7 +380,13 @@ export default function Signup() {
     if (profileError) {
       const details = profileError.message ? ` (${profileError.message})` : ''
       setErrorMessage(
-        `Δεν ήταν δυνατή η αποθήκευση του προφίλ.${details}`,
+        withDetails(
+          {
+            en: 'Unable to save profile.',
+            el: 'Δεν ήταν δυνατή η αποθήκευση του προφίλ.',
+          },
+          details,
+        ),
       )
       setIsSubmitting(false)
       return
@@ -352,7 +406,7 @@ export default function Signup() {
   const emailDomain = extractEmailDomain(email)
   const isStudentEmailDomainMismatch =
     isStudent &&
-    universityId &&
+    Boolean(universityId) &&
     emailDomain.length > 0 &&
     !selectedUniversityDomains.includes(emailDomain)
   const isUniversityDisabled = !isStudent || !cityId || isLoadingUniversities
@@ -372,24 +426,30 @@ export default function Signup() {
       />
       {isStudent ? (
         <span className="text-xs text-slate-500">
-          Χρησιμοποίησε το πανεπιστημιακό σου email (π.χ. @auth.gr)
+          {t({
+            en: 'Use your university email (e.g. @auth.gr)',
+            el: 'Χρησιμοποίησε το πανεπιστημιακό σου email (π.χ. @auth.gr)',
+          })}
         </span>
       ) : null}
       {isStudentEmailDomainMismatch ? (
         <span className="text-xs text-rose-600">
-          Για φοιτητές απαιτείται το πανεπιστημιακό email.
+          {t({
+            en: 'For students, a university email is required.',
+            el: 'Για φοιτητές απαιτείται το πανεπιστημιακό email.',
+          })}
         </span>
       ) : null}
     </label>
   )
   const passwordField = (
     <label className="block space-y-1 text-sm font-medium">
-      Κωδικός
+      {t({ en: 'Password', el: 'Κωδικός' })}
       <input
         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
         type="password"
         autoComplete="new-password"
-        placeholder="Τουλάχιστον 8 χαρακτήρες"
+        placeholder={t({ en: 'At least 8 characters', el: 'Τουλάχιστον 8 χαρακτήρες' })}
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         required
@@ -401,9 +461,14 @@ export default function Signup() {
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Δημιουργία λογαριασμού</h1>
+        <h1 className="text-2xl font-semibold">
+          {t({ en: 'Create account', el: 'Δημιουργία λογαριασμού' })}
+        </h1>
         <p className="text-sm text-slate-600">
-          Συμπλήρωσε email και κωδικό και πες μας την ιδιότητά σου.
+          {t({
+            en: 'Enter email and password and choose your status.',
+            el: 'Συμπλήρωσε email και κωδικό και πες μας την ιδιότητά σου.',
+          })}
         </p>
       </header>
 
@@ -413,7 +478,7 @@ export default function Signup() {
 
         <fieldset className="space-y-2 text-sm">
           <legend className="font-medium">
-            Είσαι φοιτητής ή pre-student;
+            {t({ en: 'Are you a student or pre-student?', el: 'Είσαι φοιτητής ή pre-student;' })}
           </legend>
           <label className="flex items-center gap-2">
             <input
@@ -423,7 +488,7 @@ export default function Signup() {
               checked={studentType === 'student'}
               onChange={(event) => handleStudentTypeChange(event.target.value)}
             />
-            Φοιτητής
+            {t({ en: 'Student', el: 'Φοιτητής' })}
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -440,7 +505,7 @@ export default function Signup() {
         {isStudent ? (
           <div className="space-y-4">
             <label className="block space-y-1 text-sm font-medium">
-              Πόλη σπουδών
+              {t({ en: 'Study city', el: 'Πόλη σπουδών' })}
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
                 value={cityId}
@@ -448,7 +513,7 @@ export default function Signup() {
                 disabled={isLoadingCities}
                 required
               >
-                <option value="">Επίλεξε πόλη</option>
+                <option value="">{t({ en: 'Select city', el: 'Επίλεξε πόλη' })}</option>
                 {cities.map((city) => (
                   <option key={city.id} value={city.id}>
                     {city.name}
@@ -456,14 +521,12 @@ export default function Signup() {
                 ))}
               </select>
               {citiesErrorMessage ? (
-                <span className="text-xs text-rose-600">
-                  {citiesErrorMessage}
-                </span>
+                <span className="text-xs text-rose-600">{t(citiesErrorMessage)}</span>
               ) : null}
             </label>
 
             <label className="block space-y-1 text-sm font-medium">
-              Πανεπιστήμιο
+              {t({ en: 'University', el: 'Πανεπιστήμιο' })}
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
                 value={universityId}
@@ -471,7 +534,7 @@ export default function Signup() {
                 disabled={isUniversityDisabled}
                 required
               >
-                <option value="">Επίλεξε πανεπιστήμιο</option>
+                <option value="">{t({ en: 'Select university', el: 'Επίλεξε πανεπιστήμιο' })}</option>
                 {universities.map((university) => (
                   <option key={university.id} value={university.id}>
                     {university.name}
@@ -479,14 +542,12 @@ export default function Signup() {
                 ))}
               </select>
               {universitiesErrorMessage ? (
-                <span className="text-xs text-rose-600">
-                  {universitiesErrorMessage}
-                </span>
+                <span className="text-xs text-rose-600">{t(universitiesErrorMessage)}</span>
               ) : null}
             </label>
 
             <label className="block space-y-1 text-sm font-medium">
-              Σχολή
+              {t({ en: 'School', el: 'Σχολή' })}
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
                 value={schoolId}
@@ -494,7 +555,7 @@ export default function Signup() {
                 disabled={isSchoolDisabled}
                 required
               >
-                <option value="">Επίλεξε σχολή</option>
+                <option value="">{t({ en: 'Select school', el: 'Επίλεξε σχολή' })}</option>
                 {schools.map((school) => (
                   <option key={school.id} value={school.id}>
                     {school.name}
@@ -502,9 +563,7 @@ export default function Signup() {
                 ))}
               </select>
               {schoolsErrorMessage ? (
-                <span className="text-xs text-rose-600">
-                  {schoolsErrorMessage}
-                </span>
+                <span className="text-xs text-rose-600">{t(schoolsErrorMessage)}</span>
               ) : null}
             </label>
           </div>
@@ -513,8 +572,10 @@ export default function Signup() {
         {studentType === 'pre-student' ? (
           <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
             <p>
-              Pre-student profiles stay active for 4 months unless you verify with a university email.
-              After 4 months, the profile is removed automatically.
+              {t({
+                en: 'Pre-student profiles stay active for 4 months unless you verify with a university email. After 4 months, the profile is removed automatically.',
+                el: 'Τα προφίλ pre-student παραμένουν ενεργά για 4 μήνες, εκτός αν επαληθευτείς με πανεπιστημιακό email. Μετά τους 4 μήνες, το προφίλ αφαιρείται αυτόματα.',
+              })}
             </p>
             <label className="flex items-start gap-2">
               <input
@@ -524,7 +585,7 @@ export default function Signup() {
                   setPreStudentAcknowledged(event.target.checked)
                 }
               />
-              <span>Έχω διαβάσει το παραπάνω μήνυμα.</span>
+              <span>{t({ en: 'I have read the message above.', el: 'Έχω διαβάσει το παραπάνω μήνυμα.' })}</span>
             </label>
           </div>
         ) : null}
@@ -537,38 +598,44 @@ export default function Signup() {
           type="submit"
           disabled={isSubmitDisabled}
         >
-          {isSubmitting ? 'Γίνεται εγγραφή...' : 'Δημιουργία λογαριασμού'}
+          {isSubmitting
+            ? t({ en: 'Creating account...', el: 'Γίνεται εγγραφή...' })
+            : t({ en: 'Create account', el: 'Δημιουργία λογαριασμού' })}
         </button>
       </form>
 
       {errorMessage ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {errorMessage}
+          {t(errorMessage)}
         </p>
       ) : null}
       {showEmailConfirmationMessage ? (
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          <p className="font-semibold">Έλεγξε το email σου 📬</p>
+          <p className="font-semibold">
+            {t({ en: 'Check your email', el: 'Έλεγξε το email σου' })}
+          </p>
           <p>
-            Σου στείλαμε ένα email επιβεβαίωσης για να ενεργοποιήσεις τον
-            λογαριασμό σου. Άνοιξε το email και πάτησε τον σύνδεσμο
-            επιβεβαίωσης για να συνεχίσεις.
+            {t({
+              en: 'We sent a confirmation email to activate your account. Open the email and click the confirmation link to continue.',
+              el: 'Σου στείλαμε ένα email επιβεβαίωσης για να ενεργοποιήσεις τον λογαριασμό σου. Άνοιξε το email και πάτησε τον σύνδεσμο επιβεβαίωσης για να συνεχίσεις.',
+            })}
           </p>
           <p className="text-xs text-slate-500">
-            Αν δεν το βλέπεις, έλεγξε και τον φάκελο ανεπιθύμητης αλληλογραφίας
-            (spam).
+            {t({
+              en: 'If you do not see it, check your spam folder.',
+              el: 'Αν δεν το βλέπεις, έλεγξε και τον φάκελο ανεπιθύμητης αλληλογραφίας (spam).',
+            })}
           </p>
         </div>
       ) : null}
 
       <p className="text-sm text-slate-600">
-        Έχεις ήδη λογαριασμό;{' '}
+        {t({ en: 'Already have an account?', el: 'Έχεις ήδη λογαριασμό;' })}{' '}
         <Link className="font-semibold text-slate-900" to="/login">
-          Σύνδεση
+          {t({ en: 'Sign in', el: 'Σύνδεση' })}
         </Link>
         .
       </p>
     </section>
   )
 }
-

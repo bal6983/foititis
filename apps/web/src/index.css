@@ -1,15 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #0b1223;
+    --surface-card: rgba(255, 255, 255, 0.05);
+    --surface-elevated: rgba(255, 255, 255, 0.08);
+    --surface-soft: rgba(148, 163, 184, 0.16);
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --border-primary: rgba(148, 163, 184, 0.3);
+    --accent: #3b82f6;
+    --accent-secondary: #22d3ee;
+    --success: #22c55e;
+    --danger: #ef4444;
+  }
+
+  html:not(.dark) {
+    --bg-primary: #eef2ff;
+    --bg-secondary: #f8fafc;
+    --surface-card: rgba(255, 255, 255, 0.82);
+    --surface-elevated: rgba(255, 255, 255, 0.96);
+    --surface-soft: rgba(148, 163, 184, 0.1);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border-primary: rgba(148, 163, 184, 0.32);
+  }
+
   html,
   body,
   #root {
-    height: 100%;
+    min-height: 100%;
+  }
+
+  html {
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    background:
+      radial-gradient(1200px 600px at 80% -5%, rgba(59, 130, 246, 0.22), transparent 55%),
+      radial-gradient(900px 540px at -5% 20%, rgba(34, 211, 238, 0.16), transparent 52%),
+      linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+    transition: background-color 220ms ease, color 220ms ease;
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply antialiased;
+    color: var(--text-primary);
+    background: transparent;
+    transition:
+      background-color 220ms ease,
+      color 220ms ease,
+      border-color 220ms ease;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition:
+      background-color 220ms ease,
+      color 220ms ease,
+      border-color 220ms ease,
+      box-shadow 220ms ease;
   }
 }
+
+@layer components {
+  .glass-card {
+    border: 1px solid var(--border-primary);
+    border-radius: 1rem;
+    background: var(--surface-card);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.2);
+  }
+
+  .panel-card {
+    border: 1px solid var(--border-primary);
+    border-radius: 1rem;
+    background: var(--surface-elevated);
+    backdrop-filter: blur(10px);
+  }
+
+  .chip {
+    border: 1px solid var(--border-primary);
+    border-radius: 9999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--surface-soft);
+  }
+}
+

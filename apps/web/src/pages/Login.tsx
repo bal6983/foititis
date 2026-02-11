@@ -1,17 +1,19 @@
-import { FormEvent, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setErrorMessage('')
+    setErrorMessage(null)
     setIsSubmitting(true)
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -21,7 +23,10 @@ export default function Login() {
 
     if (error || !data.user) {
       const details = error?.message ? ` (${error.message})` : ''
-      setErrorMessage(`Δεν ήταν δυνατή η σύνδεση.${details}`)
+      setErrorMessage({
+        en: `Unable to sign in.${details}`,
+        el: `Δεν ήταν δυνατή η σύνδεση.${details}`,
+      })
       setIsSubmitting(false)
       return
     }
@@ -33,9 +38,12 @@ export default function Login() {
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Σύνδεση</h1>
+        <h1 className="text-2xl font-semibold">{t({ en: 'Sign in', el: 'Σύνδεση' })}</h1>
         <p className="text-sm text-slate-600">
-          Χρησιμοποίησε email και κωδικό για να συνεχίσεις.
+          {t({
+            en: 'Use email and password to continue.',
+            el: 'Χρησιμοποίησε email και κωδικό για να συνεχίσεις.',
+          })}
         </p>
       </header>
 
@@ -54,7 +62,7 @@ export default function Login() {
         </label>
 
         <label className="block space-y-1 text-sm font-medium">
-          Κωδικός
+          {t({ en: 'Password', el: 'Κωδικός' })}
           <input
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
             type="password"
@@ -71,20 +79,22 @@ export default function Login() {
           type="submit"
           disabled={isSubmitting}
         >
-          {isSubmitting ? 'Γίνεται σύνδεση...' : 'Σύνδεση'}
+          {isSubmitting
+            ? t({ en: 'Signing in...', el: 'Γίνεται σύνδεση...' })
+            : t({ en: 'Sign in', el: 'Σύνδεση' })}
         </button>
       </form>
 
       {errorMessage ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {errorMessage}
+          {t(errorMessage)}
         </p>
       ) : null}
 
       <p className="text-sm text-slate-600">
-        Δεν έχεις λογαριασμό;{' '}
+        {t({ en: "Don't have an account?", el: 'Δεν έχεις λογαριασμό;' })}{' '}
         <Link className="font-semibold text-slate-900" to="/signup">
-          Δημιούργησε λογαριασμό
+          {t({ en: 'Create an account', el: 'Δημιούργησε λογαριασμό' })}
         </Link>
         .
       </p>

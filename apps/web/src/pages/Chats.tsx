@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 type ConversationRow = {
@@ -33,15 +34,7 @@ type ConversationSummary = {
 }
 
 const getAvatarInitial = (value: string) =>
-  value.trim().charAt(0).toUpperCase() || '—'
-
-const formatDateTime = (value: string) => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return date.toLocaleString('el-GR')
-}
+  value.trim().charAt(0).toUpperCase() || '-'
 
 const getTimestamp = (value: string) => {
   if (!value) {
@@ -52,16 +45,17 @@ const getTimestamp = (value: string) => {
 }
 
 export default function Chats() {
+  const { t, formatDateTime } = useI18n()
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
 
   useEffect(() => {
     let isMounted = true
 
     const loadInbox = async () => {
       setIsLoading(true)
-      setErrorMessage('')
+      setErrorMessage(null)
 
       const { data: userData, error: userError } = await supabase.auth.getUser()
 
@@ -69,7 +63,10 @@ export default function Chats() {
 
       if (userError || !userData.user) {
         console.error('Auth error while loading chats:', userError)
-        setErrorMessage('Δεν ήταν δυνατή η φόρτωση των συνομιλιών.')
+        setErrorMessage({
+          en: 'Unable to load conversations.',
+          el: 'Δεν ήταν δυνατή η φόρτωση των συνομιλιών.',
+        })
         setIsLoading(false)
         return
       }
@@ -88,7 +85,10 @@ export default function Chats() {
           'Conversation participants error:',
           participantsError,
         )
-        setErrorMessage('Δεν ήταν δυνατή η φόρτωση των συνομιλιών.')
+        setErrorMessage({
+          en: 'Unable to load conversations.',
+          el: 'Δεν ήταν δυνατή η φόρτωση των συνομιλιών.',
+        })
         setIsLoading(false)
         return
       }
@@ -197,12 +197,13 @@ export default function Chats() {
           const lastMessage = lastMessageByConversation.get(conversation.id)
           const otherUserId = otherByConversation.get(conversation.id) ?? ''
           const otherProfile = profilesById[otherUserId]
-          const title = otherProfile?.display_name?.trim() || 'Χρήστης'
+          const title =
+            otherProfile?.display_name?.trim() || t({ en: 'User', el: 'Χρήστης' })
           const avatarUrl = otherProfile?.avatar_url ?? ''
           const lastMessageAt =
             conversation.last_message_at ?? lastMessage?.created_at ?? ''
           const lastMessageText =
-            lastMessage?.content?.trim() || 'Χωρίς μήνυμα'
+            lastMessage?.content?.trim() || t({ en: 'No message', el: 'Χωρίς μήνυμα' })
 
           return {
             id: conversation.id,
@@ -225,13 +226,15 @@ export default function Chats() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [t])
 
   if (isLoading) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Συνομιλίες</h1>
-        <p className="text-sm text-slate-600">Φορτώνουμε τις συνομιλίες...</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chats', el: 'Συνομιλίες' })}</h1>
+        <p className="text-sm text-slate-600">
+          {t({ en: 'Loading conversations...', el: 'Φορτώνουμε τις συνομιλίες...' })}
+        </p>
       </section>
     )
   }
@@ -239,8 +242,8 @@ export default function Chats() {
   if (errorMessage) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Συνομιλίες</h1>
-        <p className="text-sm text-rose-600">{errorMessage}</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chats', el: 'Συνομιλίες' })}</h1>
+        <p className="text-sm text-rose-600">{t(errorMessage)}</p>
       </section>
     )
   }
@@ -248,9 +251,9 @@ export default function Chats() {
   if (conversations.length === 0) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Συνομιλίες</h1>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chats', el: 'Συνομιλίες' })}</h1>
         <p className="text-sm text-slate-600">
-          Δεν υπάρχουν συνομιλίες ακόμη
+          {t({ en: 'No conversations yet.', el: 'Δεν υπάρχουν συνομιλίες ακόμη.' })}
         </p>
       </section>
     )
@@ -258,10 +261,10 @@ export default function Chats() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Συνομιλίες</h1>
+      <h1 className="text-xl font-semibold">{t({ en: 'Chats', el: 'Συνομιλίες' })}</h1>
       <div className="space-y-3">
         {conversations.map((conversation) => {
-          const initials = getAvatarInitial(conversation.title || '—')
+          const initials = getAvatarInitial(conversation.title || '-')
           const formattedDate = conversation.lastMessageAt
             ? formatDateTime(conversation.lastMessageAt)
             : ''

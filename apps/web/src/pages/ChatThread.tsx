@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 type MessageRecord = {
@@ -16,9 +17,10 @@ type ProfileSummary = {
 }
 
 const getAvatarInitial = (value: string) =>
-  value.trim().charAt(0).toUpperCase() || '—'
+  value.trim().charAt(0).toUpperCase() || '-'
 
 export default function ChatThread() {
+  const { t } = useI18n()
   const { conversationId } = useParams()
   const [messages, setMessages] = useState<MessageRecord[]>([])
   const [profilesById, setProfilesById] = useState<
@@ -27,17 +29,20 @@ export default function ChatThread() {
   const [currentUserId, setCurrentUserId] = useState('')
   const [messageInput, setMessageInput] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [sendError, setSendError] = useState('')
+  const [sendError, setSendError] = useState<LocalizedMessage | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
   const isMountedRef = useRef(true)
 
   const loadThread = async () => {
     setIsLoading(true)
-    setErrorMessage('')
+    setErrorMessage(null)
 
     if (!conversationId) {
-      setErrorMessage('Δεν βρέθηκε συνομιλία.')
+      setErrorMessage({
+        en: 'Conversation not found.',
+        el: 'Δεν βρέθηκε συνομιλία.',
+      })
       setIsLoading(false)
       return
     }
@@ -68,9 +73,10 @@ export default function ChatThread() {
       const details = messagesError.message
         ? ` (${messagesError.message})`
         : ''
-      setErrorMessage(
-        `Δεν ήταν δυνατή η φόρτωση των μηνυμάτων.${details}`,
-      )
+      setErrorMessage({
+        en: `Unable to load messages.${details}`,
+        el: `Δεν ήταν δυνατή η φόρτωση των μηνυμάτων.${details}`,
+      })
       setIsLoading(false)
       return
     }
@@ -184,12 +190,15 @@ export default function ChatThread() {
     }
 
     if (!conversationId) {
-      setSendError('Δεν βρέθηκε συνομιλία.')
+      setSendError({
+        en: 'Conversation not found.',
+        el: 'Δεν βρέθηκε συνομιλία.',
+      })
       return
     }
 
     setIsSending(true)
-    setSendError('')
+    setSendError(null)
 
     let senderId = currentUserId
 
@@ -197,7 +206,10 @@ export default function ChatThread() {
       const { data: userData, error: userError } = await supabase.auth.getUser()
 
       if (userError || !userData.user) {
-        setSendError('Δεν ήταν δυνατή η αποστολή.')
+        setSendError({
+          en: 'Unable to send.',
+          el: 'Δεν ήταν δυνατή η αποστολή.',
+        })
         setIsSending(false)
         return
       }
@@ -230,7 +242,10 @@ export default function ChatThread() {
 
     if (insertError) {
       setMessages((prev) => prev.filter((message) => message.id !== optimisticId))
-      setSendError('Δεν ήταν δυνατή η αποστολή.')
+      setSendError({
+        en: 'Unable to send.',
+        el: 'Δεν ήταν δυνατή η αποστολή.',
+      })
       setIsSending(false)
       return
     }
@@ -249,7 +264,8 @@ export default function ChatThread() {
   }
 
   const renderAvatar = (profile: ProfileSummary | undefined) => {
-    const displayName = profile?.display_name?.trim() || 'Χρήστης'
+    const displayName =
+      profile?.display_name?.trim() || t({ en: 'User', el: 'Χρήστης' })
     const avatarUrl = profile?.avatar_url ?? ''
     const initials = getAvatarInitial(displayName)
 
@@ -275,8 +291,10 @@ export default function ChatThread() {
   if (isLoading) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Συνομιλία</h1>
-        <p className="text-sm text-slate-600">Φορτώνουμε τα μηνύματα...</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chat', el: 'Συνομιλία' })}</h1>
+        <p className="text-sm text-slate-600">
+          {t({ en: 'Loading messages...', el: 'Φορτώνουμε τα μηνύματα...' })}
+        </p>
       </section>
     )
   }
@@ -284,8 +302,8 @@ export default function ChatThread() {
   if (errorMessage) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Συνομιλία</h1>
-        <p className="text-sm text-rose-600">{errorMessage}</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chat', el: 'Συνομιλία' })}</h1>
+        <p className="text-sm text-rose-600">{t(errorMessage)}</p>
       </section>
     )
   }
@@ -296,7 +314,7 @@ export default function ChatThread() {
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
-          placeholder="Γράψε μήνυμα..."
+          placeholder={t({ en: 'Write a message...', el: 'Γράψε μήνυμα...' })}
           type="text"
           value={messageInput}
           onChange={(event) => setMessageInput(event.target.value)}
@@ -306,19 +324,21 @@ export default function ChatThread() {
           type="submit"
           disabled={!canSend}
         >
-          {isSending ? 'Αποστολή...' : 'Αποστολή'}
+          {isSending
+            ? t({ en: 'Sending...', el: 'Αποστολή...' })
+            : t({ en: 'Send', el: 'Αποστολή' })}
         </button>
       </div>
-      {sendError ? <p className="text-sm text-rose-600">{sendError}</p> : null}
+      {sendError ? <p className="text-sm text-rose-600">{t(sendError)}</p> : null}
     </form>
   )
 
   if (messages.length === 0) {
     return (
       <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Συνομιλία</h1>
+        <h1 className="text-xl font-semibold">{t({ en: 'Chat', el: 'Συνομιλία' })}</h1>
         <p className="text-sm text-slate-600">
-          Δεν υπάρχουν μηνύματα ακόμη
+          {t({ en: 'No messages yet.', el: 'Δεν υπάρχουν μηνύματα ακόμη.' })}
         </p>
         {messageComposer}
       </section>
@@ -327,7 +347,7 @@ export default function ChatThread() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Συνομιλία</h1>
+      <h1 className="text-xl font-semibold">{t({ en: 'Chat', el: 'Συνομιλία' })}</h1>
       <div className="space-y-3">
         {messages.map((message) => {
           const isOwnMessage = message.sender_id === currentUserId
@@ -349,7 +369,7 @@ export default function ChatThread() {
                     : 'bg-slate-100 text-slate-800'
                 }`}
               >
-                {message.content || '—'}
+                {message.content || '-'}
               </div>
               {isOwnMessage ? avatar : null}
             </div>

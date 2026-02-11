@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useI18n } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 export default function AuthCallback() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const hasExchangedRef = useRef(false)
 
@@ -26,5 +28,9 @@ export default function AuthCallback() {
     void exchange()
   }, [navigate])
 
-  return <p className="text-sm text-slate-600">Loading...</p>
+  return (
+    <p className="text-sm text-slate-600">
+      {t({ en: 'Loading...', el: 'Φόρτωση...' })}
+    </p>
+  )
 }

@@ -33,6 +33,21 @@ type RelatedListing = {
   created_at: string
 }
 
+type WantedListingQueryResult = Omit<WantedListing, 'categories' | 'locations'> & {
+  categories: { id: string; name: string }[] | { id: string; name: string } | null
+  locations: { id: string; name: string }[] | { id: string; name: string } | null
+}
+
+type RelatedListingQueryResult = Omit<RelatedListing, 'categories' | 'locations'> & {
+  categories: { id: string; name: string }[] | { id: string; name: string } | null
+  locations: { id: string; name: string }[] | { id: string; name: string } | null
+}
+
+const firstOrSelf = <T,>(value: T[] | T | null): T | null => {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value
+}
+
 const conditionLabels: Record<number, string> = {
   1: 'Πολύ κακή',
   2: 'Κακή',
@@ -94,7 +109,12 @@ export default function WantedDetail() {
         return
       }
 
-      setListing(data)
+      const listingData = data as WantedListingQueryResult
+      setListing({
+        ...listingData,
+        categories: firstOrSelf(listingData.categories),
+        locations: firstOrSelf(listingData.locations),
+      })
       setIsLoading(false)
 
       const categoryId = data.category_id
@@ -127,14 +147,21 @@ export default function WantedDetail() {
         if (relatedError) {
           const details = relatedError.message ? ` (${relatedError.message})` : ''
           setRelatedErrorMessage(
-            `ƒœ¤ ã«˜¤ ›¬¤˜«ã ž ­æ¨«à©ž ©®œ« ¡é¤ ˜ššœ¢ é¤.${details}`,
+            `Δεν ήταν δυνατή η φόρτωση σχετικών αγγελιών.${details}`,
           )
           setIsRelatedLoading(false)
           return
         }
 
         if (relatedData && relatedData.length > 0) {
-          setRelatedListings(relatedData)
+          const normalizedRelated = (relatedData as RelatedListingQueryResult[]).map(
+            (item) => ({
+              ...item,
+              categories: firstOrSelf(item.categories),
+              locations: firstOrSelf(item.locations),
+            }),
+          )
+          setRelatedListings(normalizedRelated)
           setIsRelatedLoading(false)
           return
         }
@@ -147,13 +174,20 @@ export default function WantedDetail() {
       if (fallbackError) {
         const details = fallbackError.message ? ` (${fallbackError.message})` : ''
         setRelatedErrorMessage(
-          `ƒœ¤ ã«˜¤ ›¬¤˜«ã ž ­æ¨«à©ž ©®œ« ¡é¤ ˜ššœ¢ é¤.${details}`,
+          `Δεν ήταν δυνατή η φόρτωση σχετικών αγγελιών.${details}`,
         )
         setIsRelatedLoading(false)
         return
       }
 
-      setRelatedListings(fallbackData ?? [])
+      const normalizedFallback = ((fallbackData ?? []) as RelatedListingQueryResult[]).map(
+        (item) => ({
+          ...item,
+          categories: firstOrSelf(item.categories),
+          locations: firstOrSelf(item.locations),
+        }),
+      )
+      setRelatedListings(normalizedFallback)
       setIsRelatedLoading(false)
 
     }
@@ -303,7 +337,7 @@ export default function WantedDetail() {
                           : ''}
                       </p>
                       <p className="mt-2 text-sm text-slate-600 break-words">
-                        ’¦§¦Ÿœ©å˜: {related.locations?.name ?? related.location}
+                        Τοποθεσία: {related.locations?.name ?? related.location}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-slate-900">
@@ -319,7 +353,7 @@ export default function WantedDetail() {
                       className="font-semibold text-slate-900"
                       to={`/marketplace/${related.id}`}
                     >
-                      ƒœª ¢œ§«¦£â¨œ œª
+                      Δες λεπτομέρειες
                     </Link>
                   </div>
                 </article>

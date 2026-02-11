@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
 
 type PublicProfileRecord = {
@@ -27,6 +28,7 @@ const getConversationIdFromRpc = (data: unknown) => {
 }
 
 export default function PublicProfile() {
+  const { t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const [profile, setProfile] = useState<PublicProfileRecord | null>(null)
@@ -35,9 +37,9 @@ export default function PublicProfile() {
   const [cityName, setCityName] = useState('')
   const [currentUserId, setCurrentUserId] = useState('')
   const [isConversationLoading, setIsConversationLoading] = useState(false)
-  const [conversationError, setConversationError] = useState('')
+  const [conversationError, setConversationError] = useState<LocalizedMessage | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -67,10 +69,13 @@ export default function PublicProfile() {
 
     const loadProfile = async () => {
       setIsLoading(true)
-      setErrorMessage('')
+      setErrorMessage(null)
 
       if (!id) {
-        setErrorMessage('Το προφίλ δεν βρέθηκε')
+        setErrorMessage({
+          en: 'Profile not found.',
+          el: 'Το προφίλ δεν βρέθηκε.',
+        })
         setIsLoading(false)
         return
       }
@@ -87,15 +92,19 @@ export default function PublicProfile() {
 
       if (profileError) {
         const details = profileError.message ? ` (${profileError.message})` : ''
-        setErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση του προφίλ.${details}`,
-        )
+        setErrorMessage({
+          en: `Unable to load profile.${details}`,
+          el: `Δεν ήταν δυνατή η φόρτωση του προφίλ.${details}`,
+        })
         setIsLoading(false)
         return
       }
 
       if (!profileData) {
-        setErrorMessage('Το προφίλ δεν βρέθηκε')
+        setErrorMessage({
+          en: 'Profile not found.',
+          el: 'Το προφίλ δεν βρέθηκε.',
+        })
         setIsLoading(false)
         return
       }
@@ -163,7 +172,7 @@ export default function PublicProfile() {
     }
 
     setIsConversationLoading(true)
-    setConversationError('')
+    setConversationError(null)
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'get_or_create_conversation',
@@ -174,7 +183,10 @@ export default function PublicProfile() {
     )
 
     if (rpcError) {
-      setConversationError('Δεν ήταν δυνατή η έναρξη συνομιλίας.')
+      setConversationError({
+        en: 'Unable to start conversation.',
+        el: 'Δεν ήταν δυνατή η έναρξη συνομιλίας.',
+      })
       setIsConversationLoading(false)
       return
     }
@@ -182,7 +194,10 @@ export default function PublicProfile() {
     const conversationId = getConversationIdFromRpc(rpcData)
 
     if (!conversationId) {
-      setConversationError('Δεν βρέθηκε συνομιλία.')
+      setConversationError({
+        en: 'Conversation not found.',
+        el: 'Δεν βρέθηκε συνομιλία.',
+      })
       setIsConversationLoading(false)
       return
     }
@@ -193,8 +208,10 @@ export default function PublicProfile() {
   if (isLoading) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Προφίλ</h1>
-        <p className="text-sm text-slate-600">Φορτώνουμε το προφίλ...</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Profile', el: 'Προφίλ' })}</h1>
+        <p className="text-sm text-slate-600">
+          {t({ en: 'Loading profile...', el: 'Φορτώνουμε το προφίλ...' })}
+        </p>
       </section>
     )
   }
@@ -202,8 +219,8 @@ export default function PublicProfile() {
   if (errorMessage) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Προφίλ</h1>
-        <p className="text-sm text-rose-600">{errorMessage}</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Profile', el: 'Προφίλ' })}</h1>
+        <p className="text-sm text-rose-600">{t(errorMessage)}</p>
       </section>
     )
   }
@@ -211,13 +228,15 @@ export default function PublicProfile() {
   if (!profile) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Προφίλ</h1>
-        <p className="text-sm text-slate-600">Το προφίλ δεν βρέθηκε</p>
+        <h1 className="text-xl font-semibold">{t({ en: 'Profile', el: 'Προφίλ' })}</h1>
+        <p className="text-sm text-slate-600">
+          {t({ en: 'Profile not found.', el: 'Το προφίλ δεν βρέθηκε.' })}
+        </p>
       </section>
     )
   }
 
-  const displayName = profile.display_name?.trim() || 'Χρήστης'
+  const displayName = profile.display_name?.trim() || t({ en: 'User', el: 'Χρήστης' })
   const canMessage = currentUserId && currentUserId !== profile.id
 
   return (
@@ -229,16 +248,24 @@ export default function PublicProfile() {
           </h1>
           {profile.is_verified_student ? (
             <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-              Verified φοιτητής
+              {t({ en: 'Verified Student', el: 'Επαληθευμένος φοιτητής' })}
             </span>
           ) : null}
         </div>
         <div className="mt-4 space-y-1 text-sm text-slate-600">
-          <p>Πανεπιστήμιο: {universityName || '—'}</p>
-          <p>Σχολή: {schoolName || '—'}</p>
-          <p>Πόλη: {cityName || '—'}</p>
+          <p>
+            {t({ en: 'University', el: 'Πανεπιστήμιο' })}: {universityName || t({ en: '—', el: '—' })}
+          </p>
+          <p>
+            {t({ en: 'School', el: 'Σχολή' })}: {schoolName || t({ en: '—', el: '—' })}
+          </p>
+          <p>
+            {t({ en: 'City', el: 'Πόλη' })}: {cityName || t({ en: '—', el: '—' })}
+          </p>
           {profile.study_year ? (
-            <p>Έτος φοίτησης: {profile.study_year}</p>
+            <p>
+              {t({ en: 'Study year', el: 'Έτος φοίτησης' })}: {profile.study_year}
+            </p>
           ) : null}
         </div>
         {canMessage ? (
@@ -248,11 +275,13 @@ export default function PublicProfile() {
             onClick={handleSendMessage}
             disabled={isConversationLoading}
           >
-            {isConversationLoading ? 'Ανοίγουμε...' : 'Στείλε μήνυμα'}
+            {isConversationLoading
+              ? t({ en: 'Opening...', el: 'Ανοίγουμε...' })
+              : t({ en: 'Send message', el: 'Στείλε μήνυμα' })}
           </button>
         ) : null}
         {conversationError ? (
-          <p className="mt-3 text-sm text-rose-600">{conversationError}</p>
+          <p className="mt-3 text-sm text-rose-600">{t(conversationError)}</p>
         ) : null}
       </header>
     </section>

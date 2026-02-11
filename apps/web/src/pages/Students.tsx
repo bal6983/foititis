@@ -17,6 +17,7 @@ type PublicProfileRow = {
   avatar_url: string | null
   school_id: string | null
   university_id: string | null
+  city_id: string | null
   is_pre_student: boolean | null
   is_verified_student: boolean | null
 }
@@ -62,6 +63,8 @@ type SearchResultCard = {
   avatarUrl: string
   isPreStudent: boolean
   isVerifiedStudent: boolean
+  cityId: string | null
+  schoolId: string | null
 }
 
 type TieredCards = {
@@ -112,11 +115,40 @@ const audienceFilters: { id: AudienceFilterId; label: string }[] = [
   { id: 'students', label: 'Students' },
 ]
 
-const getStatusBadge = (isPreStudent: boolean, isVerifiedStudent: boolean) => {
+const getStatusBadge = (isVerifiedStudent: boolean) => {
   if (isVerifiedStudent) {
     return { label: 'Verified', className: 'bg-emerald-100 text-emerald-700' }
   }
-  return { label: 'Not verified', className: 'bg-rose-100 text-rose-700' }
+  return { label: 'Pre-student', className: 'bg-amber-100 text-amber-700' }
+}
+
+const matchesCurrentUserAudience = (
+  card: { isPreStudent: boolean; isVerifiedStudent: boolean },
+  currentUserIsPreStudent: boolean,
+) =>
+  currentUserIsPreStudent ? card.isPreStudent : card.isVerifiedStudent
+
+const getFallbackTier = (
+  candidate: {
+    school_id: string | null
+    university_id: string | null
+    city_id: string | null
+  },
+  currentProfile: CurrentProfile,
+) => {
+  const schoolMatch =
+    currentProfile.schoolId !== null &&
+    candidate.school_id === currentProfile.schoolId
+  const universityMatch =
+    currentProfile.universityId !== null &&
+    candidate.university_id === currentProfile.universityId
+  const cityMatch =
+    currentProfile.cityId !== null && candidate.city_id === currentProfile.cityId
+
+  if (schoolMatch) return 1
+  if (universityMatch) return 2
+  if (cityMatch) return 4
+  return 4
 }
 
 export default function Students() {
@@ -135,8 +167,6 @@ export default function Students() {
   const [searchSchool, setSearchSchool] = useState('')
   const [universities, setUniversities] = useState<UniversityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
-  const [isLoadingUniversities, setIsLoadingUniversities] = useState(true)
-  const [isLoadingSchools, setIsLoadingSchools] = useState(true)
   const [searchUniversitiesError, setSearchUniversitiesError] = useState('')
   const [searchSchoolsError, setSearchSchoolsError] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResultCard[]>([])
@@ -211,7 +241,7 @@ export default function Students() {
       return
     }
 
-    setActiveFilter('schoolCity')
+    setActiveFilter('all')
     setAudienceFilter('prestudent')
     defaultFiltersSetRef.current = true
   }, [isPreStudent])
@@ -283,11 +313,13 @@ export default function Students() {
     let profilesQuery = supabase
       .from('public_profiles')
       .select(
-        'id, display_name, study_year, avatar_url, school_id, university_id, is_verified_student, is_pre_student',
+        'id, display_name, study_year, avatar_url, school_id, university_id, city_id, is_verified_student, is_pre_student',
       )
 
     if (audienceFilter === 'prestudent') {
-      profilesQuery = profilesQuery.eq('is_pre_student', true)
+      profilesQuery = profilesQuery
+        .eq('is_pre_student', true)
+        .eq('is_verified_student', false)
     } else if (audienceFilter === 'students') {
       profilesQuery = profilesQuery.eq('is_verified_student', true)
     }
@@ -362,8 +394,11 @@ export default function Students() {
       displayName: profile.display_name,
       studyYear: profile.study_year ?? null,
       avatarUrl: profile.avatar_url ?? '',
-      isPreStudent: Boolean(profile.is_pre_student),
+      isPreStudent:
+        Boolean(profile.is_pre_student) && !Boolean(profile.is_verified_student),
       isVerifiedStudent: Boolean(profile.is_verified_student),
+      cityId: profile.city_id ?? null,
+      schoolId: profile.school_id ?? null,
       universityName: profile.university_id
         ? searchUniversityMap.get(profile.university_id) ?? ''
         : '',
@@ -371,6 +406,25 @@ export default function Students() {
         ? searchSchoolMap.get(profile.school_id) ?? ''
         : '',
     }))
+
+    if (isPreStudent && currentProfile) {
+      const myCityId = currentProfile.cityId
+      const mySchoolId = currentProfile.schoolId
+
+      const getSearchPriority = (card: SearchResultCard): number => {
+        if (card.isPreStudent) {
+          const cityMatch = myCityId !== null && card.cityId === myCityId
+          const schoolMatch = mySchoolId !== null && card.schoolId === mySchoolId
+          if (cityMatch && schoolMatch) return 1
+          if (cityMatch) return 2
+          if (schoolMatch) return 3
+          return 4
+        }
+        return 5
+      }
+
+      nextResults.sort((a, b) => getSearchPriority(a) - getSearchPriority(b))
+    }
 
     setSearchResults(nextResults)
     setIsSearching(false)
@@ -380,8 +434,6 @@ export default function Students() {
     let isMounted = true
 
     const loadSearchOptions = async () => {
-      setIsLoadingUniversities(true)
-      setIsLoadingSchools(true)
       setSearchUniversitiesError('')
       setSearchSchoolsError('')
 
@@ -411,8 +463,6 @@ export default function Students() {
         setSchools(schoolsResponse.data ?? [])
       }
 
-      setIsLoadingUniversities(false)
-      setIsLoadingSchools(false)
     }
 
     loadSearchOptions()
@@ -444,7 +494,7 @@ export default function Students() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('school_id, university_id, city_id, is_pre_student')
+        .select('school_id, university_id, city_id, is_pre_student, is_verified_student')
         .eq('id', userData.user.id)
         .maybeSingle()
 
@@ -462,7 +512,10 @@ export default function Students() {
         universityId: profileData?.university_id ?? null,
         cityId: profileData?.city_id ?? null,
       })
-      setIsPreStudent(Boolean(profileData?.is_pre_student))
+      const currentUserIsPreStudent =
+        Boolean(profileData?.is_pre_student) &&
+        !Boolean(profileData?.is_verified_student)
+      setIsPreStudent(currentUserIsPreStudent)
 
       const { data: recommendedData, error: recommendedError } =
         await supabase.rpc('get_recommended_student_profiles', {
@@ -550,7 +603,9 @@ export default function Students() {
             displayName: profileItem.display_name ?? null,
             studyYear: profileItem.study_year ?? null,
             avatarUrl: profileItem.avatar_url ?? '',
-            isPreStudent: Boolean(profileItem.is_pre_student),
+            isPreStudent:
+              Boolean(profileItem.is_pre_student) &&
+              !Boolean(profileItem.is_verified_student),
             isVerifiedStudent: Boolean(profileItem.is_verified_student),
           })
         })
@@ -579,8 +634,88 @@ export default function Students() {
         }
       })
 
+      let cardsForAudience = cards.filter((card) =>
+        matchesCurrentUserAudience(card, currentUserIsPreStudent),
+      )
+
+      if (currentUserIsPreStudent && cardsForAudience.length === 0) {
+        const currentProfileSnapshot: CurrentProfile = {
+          schoolId: profileData?.school_id ?? null,
+          universityId: profileData?.university_id ?? null,
+          cityId: profileData?.city_id ?? null,
+        }
+
+        const { data: fallbackProfilesData, error: fallbackProfilesError } =
+          await supabase
+            .from('public_profiles')
+            .select(
+              'id, display_name, study_year, avatar_url, school_id, university_id, city_id, is_verified_student, is_pre_student',
+            )
+            .eq('is_pre_student', true)
+            .eq('is_verified_student', false)
+            .neq('id', userData.user.id)
+
+        if (!fallbackProfilesError && fallbackProfilesData) {
+          const fallbackProfiles = fallbackProfilesData as PublicProfileRow[]
+          const fallbackSchoolIds = Array.from(
+            new Set(fallbackProfiles.map((item) => item.school_id).filter(Boolean)),
+          ) as string[]
+          const fallbackUniversityIds = Array.from(
+            new Set(
+              fallbackProfiles.map((item) => item.university_id).filter(Boolean),
+            ),
+          ) as string[]
+
+          const fallbackSchoolMap = new Map<string, string>()
+          const fallbackUniversityMap = new Map<string, string>()
+
+          if (fallbackSchoolIds.length > 0) {
+            const { data: fallbackSchoolsData } = await supabase
+              .from('schools')
+              .select('id, name')
+              .in('id', fallbackSchoolIds)
+
+            fallbackSchoolsData?.forEach((school) => {
+              fallbackSchoolMap.set(school.id, school.name)
+            })
+          }
+
+          if (fallbackUniversityIds.length > 0) {
+            const { data: fallbackUniversitiesData } = await supabase
+              .from('universities')
+              .select('id, name')
+              .in('id', fallbackUniversityIds)
+
+            fallbackUniversitiesData?.forEach((university) => {
+              fallbackUniversityMap.set(university.id, university.name)
+            })
+          }
+
+          cardsForAudience = fallbackProfiles.map((profileItem) => ({
+            id: profileItem.id,
+            tier: getFallbackTier(profileItem, currentProfileSnapshot),
+            displayName: profileItem.display_name,
+            studyYear: profileItem.study_year ?? null,
+            isPreStudent:
+              Boolean(profileItem.is_pre_student) &&
+              !Boolean(profileItem.is_verified_student),
+            isVerifiedStudent: Boolean(profileItem.is_verified_student),
+            avatarUrl: profileItem.avatar_url ?? '',
+            schoolName: profileItem.school_id
+              ? fallbackSchoolMap.get(profileItem.school_id) ?? ''
+              : '',
+            universityName: profileItem.university_id
+              ? fallbackUniversityMap.get(profileItem.university_id) ?? ''
+              : '',
+            schoolId: profileItem.school_id ?? null,
+            universityId: profileItem.university_id ?? null,
+            cityId: profileItem.city_id ?? null,
+          }))
+        }
+      }
+
       const nextTiered: TieredCards = { 1: [], 2: [], 3: [], 4: [] }
-      cards.forEach((card) => {
+      cardsForAudience.forEach((card) => {
         if (card.tier >= 1 && card.tier <= 4) {
           nextTiered[card.tier as 1 | 2 | 3 | 4].push(card)
         }
@@ -691,10 +826,7 @@ export default function Students() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {searchResults.map((result) => {
                 const displayName = result.displayName?.trim() || 'Χρήστης'
-                const statusBadge = getStatusBadge(
-                  result.isPreStudent,
-                  result.isVerifiedStudent,
-                )
+                const statusBadge = getStatusBadge(result.isVerifiedStudent)
                 return (
                   <div
                     key={result.id}
@@ -819,10 +951,7 @@ export default function Students() {
             <h2 className="text-lg font-semibold">{title}</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {cards.map((card) => {
-                const statusBadge = getStatusBadge(
-                  card.isPreStudent,
-                  card.isVerifiedStudent,
-                )
+                const statusBadge = getStatusBadge(card.isVerifiedStudent)
                 return (
                 <div
                   key={card.id}

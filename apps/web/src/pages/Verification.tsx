@@ -1,12 +1,28 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
 type VerificationState = 'idle' | 'pending' | 'approved' | 'rejected'
+
+type OptionItem = {
+  id: string
+  name: string
+}
 
 export default function Verification() {
   const [status, setStatus] = useState<VerificationState>('idle')
   const [userId, setUserId] = useState<string | null>(null)
   const [hasStatusField, setHasStatusField] = useState(false)
+  const [isPreStudent, setIsPreStudent] = useState(false)
+  const [cityId, setCityId] = useState<string | null>(null)
+  const [universityId, setUniversityId] = useState<string | null>(null)
+  const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [universityEmail, setUniversityEmail] = useState('')
+  const [cities, setCities] = useState<OptionItem[]>([])
+  const [universities, setUniversities] = useState<OptionItem[]>([])
+  const [schools, setSchools] = useState<OptionItem[]>([])
+  const [isLoadingCities, setIsLoadingCities] = useState(false)
+  const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
+  const [isLoadingSchools, setIsLoadingSchools] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -30,7 +46,9 @@ export default function Verification() {
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select(
+          'is_verified_student, is_pre_student, verification_status, city_id, university_id, school_id, university_email',
+        )
         .eq('id', userData.user.id)
         .single()
 
@@ -54,6 +72,13 @@ export default function Verification() {
         typeof rawStatus === 'string' ? rawStatus.toLowerCase() : null
 
       setHasStatusField(hasVerificationStatusField)
+      setCityId(profile.city_id ?? null)
+      setUniversityId(profile.university_id ?? null)
+      setSchoolId(profile.school_id ?? null)
+      setUniversityEmail(profile.university_email ?? '')
+      setIsPreStudent(
+        Boolean(profile.is_pre_student) && !Boolean(profile.is_verified_student),
+      )
 
       if (profile.is_verified_student) {
         setStatus('approved')
@@ -75,6 +100,128 @@ export default function Verification() {
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadCities = async () => {
+      if (!isPreStudent) return
+      setIsLoadingCities(true)
+      const { data, error } = await supabase
+        .from('cities')
+        .select('id, name')
+        .order('name', { ascending: true })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setErrorMessage(`Δεν ήταν δυνατή η φόρτωση των πόλεων.${details}`)
+        setIsLoadingCities(false)
+        return
+      }
+
+      setCities((data ?? []) as OptionItem[])
+      setIsLoadingCities(false)
+    }
+
+    loadCities()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isPreStudent])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadUniversities = async () => {
+      if (!isPreStudent) return
+      if (!cityId) {
+        setUniversities([])
+        return
+      }
+
+      setIsLoadingUniversities(true)
+      const { data, error } = await supabase
+        .from('universities')
+        .select('id, name')
+        .eq('city_id', cityId)
+        .order('name', { ascending: true })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setErrorMessage(`Δεν ήταν δυνατή η φόρτωση των πανεπιστημίων.${details}`)
+        setIsLoadingUniversities(false)
+        return
+      }
+
+      setUniversities((data ?? []) as OptionItem[])
+      setIsLoadingUniversities(false)
+    }
+
+    loadUniversities()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cityId, isPreStudent])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadSchools = async () => {
+      if (!isPreStudent) return
+      if (!universityId) {
+        setSchools([])
+        return
+      }
+
+      setIsLoadingSchools(true)
+      const { data, error } = await supabase
+        .from('schools')
+        .select('id, name')
+        .eq('university_id', universityId)
+        .order('name', { ascending: true })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setErrorMessage(`Δεν ήταν δυνατή η φόρτωση των σχολών.${details}`)
+        setIsLoadingSchools(false)
+        return
+      }
+
+      setSchools((data ?? []) as OptionItem[])
+      setIsLoadingSchools(false)
+    }
+
+    loadSchools()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isPreStudent, universityId])
+
+  const shouldShowCta = status === 'idle' || status === 'rejected'
+
+  const canSubmit = useMemo(() => {
+    if (!shouldShowCta || isSubmitting) return false
+    if (universityEmail.trim() === '') return false
+    if (!isPreStudent) return true
+    return Boolean(cityId && universityId && schoolId)
+  }, [
+    cityId,
+    isPreStudent,
+    isSubmitting,
+    schoolId,
+    shouldShowCta,
+    universityEmail,
+    universityId,
+  ])
+
   const handleSubmit = async () => {
     setErrorMessage('')
 
@@ -83,27 +230,64 @@ export default function Verification() {
       return
     }
 
+    if (universityEmail.trim() === '') {
+      setErrorMessage('Συμπλήρωσε πανεπιστημιακό email.')
+      return
+    }
+
+    if (isPreStudent && (!cityId || !universityId || !schoolId)) {
+      setErrorMessage(
+        'Ως pre-student πρέπει να επιλέξεις τελική πόλη, πανεπιστήμιο και σχολή.',
+      )
+      return
+    }
+
     setIsSubmitting(true)
 
-    if (hasStatusField) {
-      const { error } = await supabase
+    if (isPreStudent) {
+      const { error: profileUpdateError } = await supabase
         .from('profiles')
-        .update({ verification_status: 'pending' })
+        .update({
+          city_id: cityId,
+          university_id: universityId,
+          school_id: schoolId,
+        })
         .eq('id', userId)
 
-      if (error) {
-        const details = error.message ? ` (${error.message})` : ''
-        setErrorMessage(`Δεν ήταν δυνατή η υποβολή.${details}`)
+      if (profileUpdateError) {
+        const details = profileUpdateError.message
+          ? ` (${profileUpdateError.message})`
+          : ''
+        setErrorMessage(`Δεν ήταν δυνατή η ενημέρωση τελικής σχολής.${details}`)
         setIsSubmitting(false)
         return
       }
     }
 
+    const { error: verificationRequestError } = await supabase.rpc(
+      'request_university_verification',
+      { p_university_email: universityEmail.trim() },
+    )
+
+    if (verificationRequestError) {
+      const details = verificationRequestError.message
+        ? ` (${verificationRequestError.message})`
+        : ''
+      setErrorMessage(`Δεν ήταν δυνατή η υποβολή.${details}`)
+      setIsSubmitting(false)
+      return
+    }
+
+    if (hasStatusField) {
+      await supabase
+        .from('profiles')
+        .update({ verification_status: 'pending' })
+        .eq('id', userId)
+    }
+
     setIsSubmitting(false)
     setStatus('pending')
   }
-
-  const shouldShowCta = status === 'idle' || status === 'rejected'
 
   if (isLoading) {
     return (
@@ -116,7 +300,7 @@ export default function Verification() {
     )
   }
 
-  if (errorMessage) {
+  if (errorMessage && !shouldShowCta) {
     return (
       <section className="space-y-2">
         <h1 className="text-xl font-semibold">Επαλήθευση φοιτητή</h1>
@@ -160,7 +344,7 @@ export default function Verification() {
       {status === 'rejected' ? (
         <div className="rounded-lg border border-slate-200 bg-white p-5">
           <p className="text-sm font-semibold text-slate-900">
-            �Η αίτησή σου δεν εγκρίθηκε με τα υπάρχοντα στοιχεία.
+            Η αίτησή σου δεν εγκρίθηκε με τα υπάρχοντα στοιχεία.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Μπορείς να υποβάλεις νέα αίτηση με ενημερωμένα στοιχεία.
@@ -169,17 +353,109 @@ export default function Verification() {
       ) : null}
 
       {shouldShowCta ? (
-        <button
-          className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-        >
-          {isSubmitting
-            ? 'Υποβολή σε εξέλιξη...'
-            : 'Υποβολή αίτησης επαλήθευσης'}
-        </button>
+        <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+          {isPreStudent ? (
+            <>
+              <p className="text-sm text-slate-600">
+                Επέλεξε την τελική σχολή σου πριν την επαλήθευση email.
+              </p>
+
+              <label className="block space-y-1 text-sm font-medium">
+                Πόλη
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                  value={cityId ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value || null
+                    setCityId(value)
+                    setUniversityId(null)
+                    setSchoolId(null)
+                  }}
+                  disabled={isLoadingCities}
+                  required
+                >
+                  <option value="">Επίλεξε πόλη</option>
+                  {cities.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {city.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-1 text-sm font-medium">
+                Πανεπιστήμιο
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                  value={universityId ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value || null
+                    setUniversityId(value)
+                    setSchoolId(null)
+                  }}
+                  disabled={!cityId || isLoadingUniversities}
+                  required
+                >
+                  <option value="">Επίλεξε πανεπιστήμιο</option>
+                  {universities.map((university) => (
+                    <option key={university.id} value={university.id}>
+                      {university.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-1 text-sm font-medium">
+                Σχολή
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                  value={schoolId ?? ''}
+                  onChange={(event) => setSchoolId(event.target.value || null)}
+                  disabled={!universityId || isLoadingSchools}
+                  required
+                >
+                  <option value="">Επίλεξε σχολή</option>
+                  {schools.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+
+          <label className="block space-y-1 text-sm font-medium">
+            Πανεπιστημιακό email
+            <input
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+              type="email"
+              value={universityEmail}
+              onChange={(event) => setUniversityEmail(event.target.value)}
+              placeholder="you@university.gr"
+              required
+            />
+          </label>
+
+          <button
+            className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+          >
+            {isSubmitting
+              ? 'Υποβολή σε εξέλιξη...'
+              : 'Υποβολή αίτησης επαλήθευσης'}
+          </button>
+
+          {errorMessage ? (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {errorMessage}
+            </p>
+          ) : null}
+        </section>
       ) : null}
     </section>
   )
 }
+
