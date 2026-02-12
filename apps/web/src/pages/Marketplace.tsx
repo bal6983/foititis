@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CreateItemModal from '../components/marketplace/CreateItemModal'
 import FilterTabs, { type ListingFilter } from '../components/marketplace/FilterTabs'
@@ -45,6 +45,34 @@ type CategoryOption = {
   name: string
 }
 
+type SavedItemType = 'listing' | 'wanted'
+
+type SavedRow = {
+  item_type: SavedItemType
+  item_id: string
+}
+
+type PostgrestErrorLike = {
+  message?: string | null
+  details?: string | null
+  hint?: string | null
+}
+
+const hasMissingSchemaError = (error: PostgrestErrorLike | null | undefined, token?: string) => {
+  if (!error) return false
+  const joined = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase()
+  if (token && !joined.includes(token.toLowerCase())) return false
+  return (
+    joined.includes('does not exist') ||
+    joined.includes('could not find the table') ||
+    joined.includes('schema cache')
+  )
+}
+
+const toSavedKey = (itemType: SavedItemType, itemId: string) => `${itemType}:${itemId}`
+const toLocalSavedKey = (userId: string, itemType: SavedItemType, itemId: string) =>
+  `saved:${userId}:${itemType}:${itemId}`
+
 const conditionLabelMapEn: Record<number, string> = {
   1: 'Poor',
   2: 'Fair',
@@ -55,13 +83,17 @@ const conditionLabelMapEn: Record<number, string> = {
 
 export default function Marketplace() {
   const { t } = useI18n()
-  const conditionLabelMap: Record<number, string> = {
-    1: t({ en: 'Poor', el: 'Πολύ κακή' }),
-    2: t({ en: 'Fair', el: 'Κακή' }),
-    3: t({ en: 'Good', el: 'Μέτρια' }),
-    4: t({ en: 'Very Good', el: 'Καλή' }),
-    5: t({ en: 'Excellent', el: 'Πολύ καλή' }),
-  }
+  const getConditionLabel = useCallback(
+    (value: number | null | undefined) => {
+      if (value === 1) return t({ en: 'Poor', el: 'Πολύ κακή' })
+      if (value === 2) return t({ en: 'Fair', el: 'Κακή' })
+      if (value === 3) return t({ en: 'Good', el: 'Μέτρια' })
+      if (value === 4) return t({ en: 'Very Good', el: 'Καλή' })
+      if (value === 5) return t({ en: 'Excellent', el: 'Πολύ καλή' })
+      return ''
+    },
+    [t],
+  )
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [items, setItems] = useState<UnifiedMarketplaceItem[]>([])
@@ -77,13 +109,73 @@ export default function Marketplace() {
   const [currentUniversityName, setCurrentUniversityName] = useState('University')
   const [canCreate, setCanCreate] = useState(true)
   const [createType, setCreateType] = useState<'sell' | 'want'>('sell')
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [savedUsesFallback, setSavedUsesFallback] = useState(false)
+  const [saveBusyKeys, setSaveBusyKeys] = useState<Set<string>>(new Set())
 
   const viewParam = searchParams.get('view')
   const createParam = searchParams.get('create')
   const isMineFilter =
     searchParams.get('mine') === '1' || searchParams.get('mine') === 'true'
 
-  const loadMarketplace = async () => {
+  const applySavedState = (itemType: SavedItemType, itemId: string, nextSaved: boolean) => {
+    const key = toSavedKey(itemType, itemId)
+    setSavedKeys((previous) => {
+      const next = new Set(previous)
+      if (nextSaved) next.add(key)
+      else next.delete(key)
+      return next
+    })
+    setItems((previous) =>
+      previous.map((item) => {
+        const candidateType: SavedItemType = item.type === 'sell' ? 'listing' : 'wanted'
+        if (candidateType !== itemType || item.id !== itemId) return item
+        return { ...item, isSaved: nextSaved }
+      }),
+    )
+  }
+
+  const loadSavedState = useCallback(async (userId: string) => {
+    const nextSavedKeys = new Set<string>()
+    let fallbackMode = false
+
+    const savedRes = await supabase
+      .from('saved_items')
+      .select('item_type, item_id')
+      .eq('user_id', userId)
+      .in('item_type', ['listing', 'wanted'])
+
+    if (savedRes.error && hasMissingSchemaError(savedRes.error, 'saved_items')) {
+      fallbackMode = true
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const key = window.localStorage.key(i)
+        if (!key) continue
+        const parts = key.split(':')
+        if (parts.length !== 4) continue
+        if (parts[0] !== 'saved') continue
+        if (parts[1] !== userId) continue
+        const itemType = parts[2]
+        const itemId = parts[3]
+        if ((itemType === 'listing' || itemType === 'wanted') && window.localStorage.getItem(key) === '1') {
+          nextSavedKeys.add(toSavedKey(itemType, itemId))
+        }
+      }
+    } else if (savedRes.error) {
+      const details = savedRes.error.message ? ` (${savedRes.error.message})` : ''
+      setErrorMessage({
+        en: `Unable to load saved state.${details}`,
+        el: `Δεν ήταν δυνατή η φόρτωση αποθηκευμένων.${details}`,
+      })
+    } else {
+      for (const row of (savedRes.data ?? []) as SavedRow[]) {
+        nextSavedKeys.add(toSavedKey(row.item_type, row.item_id))
+      }
+    }
+
+    return { saved: nextSavedKeys, usesFallback: fallbackMode }
+  }, [])
+
+  const loadMarketplace = useCallback(async () => {
     setIsLoading(true)
     setErrorMessage(null)
 
@@ -101,14 +193,18 @@ export default function Marketplace() {
     const userId = userData.user.id
     setCurrentUserId(userId)
 
-    const [profileResponse, categoriesResponse] = await Promise.all([
+    const [profileResponse, categoriesResponse, savedState] = await Promise.all([
       supabase
         .from('profiles')
         .select('university_id, is_pre_student, is_verified_student')
         .eq('id', userId)
         .maybeSingle(),
       supabase.from('categories').select('id, name').order('name', { ascending: true }),
+      loadSavedState(userId),
     ])
+
+    setSavedKeys(savedState.saved)
+    setSavedUsesFallback(savedState.usesFallback)
 
     const profileData = profileResponse.data
     const isVerified = Boolean(profileData?.is_verified_student)
@@ -203,7 +299,7 @@ export default function Marketplace() {
           category: row.category,
           condition:
             row.condition ||
-            (row.condition_rating ? conditionLabelMap[row.condition_rating] : ''),
+            getConditionLabel(row.condition_rating),
           price: row.price,
           universityName: owner?.university_id
             ? universityMap.get(owner.university_id) ?? t({ en: 'University', el: 'Πανεπιστήμιο' })
@@ -212,6 +308,7 @@ export default function Marketplace() {
           sellerLevel: level,
           sellerVerified: Boolean(owner?.is_verified_student),
           createdAt: row.created_at,
+          isSaved: savedState.saved.has(toSavedKey('listing', row.id)),
         }
       }),
       ...wantRows.map((row) => {
@@ -225,7 +322,7 @@ export default function Marketplace() {
           description: row.description,
           category: row.category,
           condition: row.condition_rating
-            ? conditionLabelMap[row.condition_rating]
+            ? getConditionLabel(row.condition_rating)
             : t({ en: 'Requested', el: 'Ζητείται' }),
           price: null,
           universityName: owner?.university_id
@@ -235,36 +332,46 @@ export default function Marketplace() {
           sellerLevel: level,
           sellerVerified: Boolean(owner?.is_verified_student),
           createdAt: row.created_at,
+          isSaved: savedState.saved.has(toSavedKey('wanted', row.id)),
         }
       }),
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     setItems(merged)
     setIsLoading(false)
-  }
+  }, [getConditionLabel, loadSavedState, t])
 
   useEffect(() => {
-    loadMarketplace()
-  }, [t])
+    const timerId = window.setTimeout(() => {
+      void loadMarketplace()
+    }, 0)
+
+    return () => window.clearTimeout(timerId)
+  }, [loadMarketplace])
 
   useEffect(() => {
-    if (viewParam === 'sell' || viewParam === 'want') {
-      setFilter(viewParam)
-      return
-    }
-    setFilter('all')
+    const timerId = window.setTimeout(() => {
+      if (viewParam === 'sell' || viewParam === 'want') {
+        setFilter(viewParam)
+        return
+      }
+      setFilter('all')
+    }, 0)
+    return () => window.clearTimeout(timerId)
   }, [viewParam])
 
   useEffect(() => {
     if (createParam !== 'sell' && createParam !== 'want') {
       return
     }
-
-    setCreateType(createParam)
-    setIsCreateOpen(true)
-    const nextParams = new URLSearchParams(searchParams)
-    nextParams.delete('create')
-    setSearchParams(nextParams, { replace: true })
+    const timerId = window.setTimeout(() => {
+      setCreateType(createParam)
+      setIsCreateOpen(true)
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('create')
+      setSearchParams(nextParams, { replace: true })
+    }, 0)
+    return () => window.clearTimeout(timerId)
   }, [createParam, searchParams, setSearchParams])
 
   const filteredItems = useMemo(() => {
@@ -281,6 +388,76 @@ export default function Marketplace() {
       )
     })
   }, [currentUserId, filter, isMineFilter, items, search])
+
+  const handleToggleSave = async (item: UnifiedMarketplaceItem) => {
+    if (!currentUserId) return
+    const itemType: SavedItemType = item.type === 'sell' ? 'listing' : 'wanted'
+    const saveKey = toSavedKey(itemType, item.id)
+    const localKey = toLocalSavedKey(currentUserId, itemType, item.id)
+    const isAlreadySaved = savedKeys.has(saveKey)
+
+    setSaveBusyKeys((previous) => new Set(previous).add(saveKey))
+
+    if (savedUsesFallback) {
+      if (isAlreadySaved) window.localStorage.removeItem(localKey)
+      else window.localStorage.setItem(localKey, '1')
+      applySavedState(itemType, item.id, !isAlreadySaved)
+      setSaveBusyKeys((previous) => {
+        const next = new Set(previous)
+        next.delete(saveKey)
+        return next
+      })
+      return
+    }
+
+    if (isAlreadySaved) {
+      const deleteRes = await supabase
+        .from('saved_items')
+        .delete()
+        .eq('user_id', currentUserId)
+        .eq('item_type', itemType)
+        .eq('item_id', item.id)
+
+      if (deleteRes.error) {
+        if (hasMissingSchemaError(deleteRes.error, 'saved_items')) {
+          window.localStorage.removeItem(localKey)
+          setSavedUsesFallback(true)
+          applySavedState(itemType, item.id, false)
+        }
+      } else {
+        applySavedState(itemType, item.id, false)
+      }
+
+      setSaveBusyKeys((previous) => {
+        const next = new Set(previous)
+        next.delete(saveKey)
+        return next
+      })
+      return
+    }
+
+    const insertRes = await supabase.from('saved_items').insert({
+      user_id: currentUserId,
+      item_type: itemType,
+      item_id: item.id,
+    })
+
+    if (insertRes.error) {
+      if (hasMissingSchemaError(insertRes.error, 'saved_items')) {
+        window.localStorage.setItem(localKey, '1')
+        setSavedUsesFallback(true)
+        applySavedState(itemType, item.id, true)
+      }
+    } else {
+      applySavedState(itemType, item.id, true)
+    }
+
+    setSaveBusyKeys((previous) => {
+      const next = new Set(previous)
+      next.delete(saveKey)
+      return next
+    })
+  }
 
   const handleCreate = async (payload: CreateMarketplaceItemInput) => {
     if (!currentUserId) return
@@ -403,6 +580,15 @@ export default function Marketplace() {
               })}
             </p>
           ) : null}
+
+          {savedUsesFallback ? (
+            <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {t({
+                en: 'Saved mode is local until DB migrations are applied.',
+                el: 'Το save λειτουργεί τοπικά μέχρι να εφαρμοστούν τα migrations.',
+              })}
+            </p>
+          ) : null}
         </div>
       </SectionCard>
 
@@ -420,9 +606,19 @@ export default function Marketplace() {
       {!isLoading && !errorMessage ? (
         filteredItems.length > 0 ? (
           <div className="grid gap-4 xl:grid-cols-2">
-            {filteredItems.map((item) => (
-              <MarketplaceCard key={`${item.type}-${item.id}`} item={item} />
-            ))}
+            {filteredItems.map((item) => {
+              const itemType: SavedItemType = item.type === 'sell' ? 'listing' : 'wanted'
+              const key = toSavedKey(itemType, item.id)
+              return (
+                <MarketplaceCard
+                  key={`${item.type}-${item.id}`}
+                  item={item}
+                  onToggleSave={handleToggleSave}
+                  saveBusy={saveBusyKeys.has(key)}
+                  saveEnabled={Boolean(currentUserId)}
+                />
+              )
+            })}
           </div>
         ) : (
           <section className="glass-card p-6 text-center">

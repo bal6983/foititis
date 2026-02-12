@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -17,6 +17,7 @@ type MarketplaceListing = {
   description: string
   created_at: string
   seller_id: string
+  view_count: number | null
   profiles: { display_name: string | null } | null
 }
 
@@ -27,6 +28,13 @@ type MarketplaceListingQueryResult = Omit<
   locations: { id: string; name: string }[] | { id: string; name: string } | null
   categories: { id: string; name: string }[] | { id: string; name: string } | null
   profiles: { display_name: string | null }[] | { display_name: string | null } | null
+}
+
+type PostgrestErrorLike = {
+  message?: string | null
+  details?: string | null
+  hint?: string | null
+  code?: string | null
 }
 
 const firstOrSelf = <T,>(value: T[] | T | null): T | null => {
@@ -53,6 +61,17 @@ const formatDate = (value: string) => {
   return date.toLocaleDateString('el-GR')
 }
 
+const hasMissingSchemaError = (error: PostgrestErrorLike | null | undefined, token?: string) => {
+  if (!error) return false
+  const joined = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase()
+  if (token && !joined.includes(token.toLowerCase())) return false
+  return (
+    joined.includes('does not exist') ||
+    joined.includes('could not find the table') ||
+    joined.includes('schema cache')
+  )
+}
+
 export default function MarketplaceDetail() {
   const { listingId } = useParams()
   const navigate = useNavigate()
@@ -60,6 +79,12 @@ export default function MarketplaceDetail() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isContactLoading, setIsContactLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [savedUsesFallback, setSavedUsesFallback] = useState(false)
+  const [contactError, setContactError] = useState('')
   const [loadErrorMessage, setLoadErrorMessage] = useState('')
 
   useEffect(() => {
@@ -82,13 +107,34 @@ export default function MarketplaceDetail() {
         setCurrentUserId(null)
       }
 
-      const { data, error } = await supabase
+      const listingWithViewRes = await supabase
         .from('listings')
         .select(
-          'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at, seller_id, profiles(display_name)',
+          'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at, seller_id, view_count, profiles(display_name)',
         )
         .eq('id', listingId)
         .single()
+
+      let data = listingWithViewRes.data as MarketplaceListingQueryResult | null
+      let error = listingWithViewRes.error
+
+      if (listingWithViewRes.error && hasMissingSchemaError(listingWithViewRes.error, 'view_count')) {
+        const listingLegacyRes = await supabase
+          .from('listings')
+          .select(
+            'id, title, price, condition, condition_rating, location, location_id, locations ( id, name ), category, category_id, categories ( id, name ), description, created_at, seller_id, profiles(display_name)',
+          )
+          .eq('id', listingId)
+          .single()
+
+        if (listingLegacyRes.data) {
+          data = {
+            ...(listingLegacyRes.data as Omit<MarketplaceListingQueryResult, 'view_count'>),
+            view_count: 0,
+          } as MarketplaceListingQueryResult
+        }
+        error = listingLegacyRes.error
+      }
 
       if (!isMounted) return
 
@@ -106,6 +152,44 @@ export default function MarketplaceDetail() {
         categories: firstOrSelf(listingData.categories),
         profiles: firstOrSelf(listingData.profiles),
       })
+
+      if (!userError && userData.user && userData.user.id !== listingData.seller_id) {
+        const viewInsertRes = await supabase
+          .from('listing_views')
+          .insert({
+            listing_id: listingData.id,
+            viewer_id: userData.user.id,
+          })
+
+        if (
+          viewInsertRes.error &&
+          viewInsertRes.error.code !== '23505' &&
+          !hasMissingSchemaError(viewInsertRes.error, 'listing_views')
+        ) {
+          console.error('Listing view tracking error:', viewInsertRes.error)
+        }
+      }
+
+      if (!userError && userData.user) {
+        const userId = userData.user.id
+        const savedRes = await supabase
+          .from('saved_items')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('item_type', 'listing')
+          .eq('item_id', listingData.id)
+          .maybeSingle()
+
+        if (savedRes.error && hasMissingSchemaError(savedRes.error, 'saved_items')) {
+          const fallback = window.localStorage.getItem(`saved:${userId}:listing:${listingData.id}`)
+          setSavedUsesFallback(true)
+          setIsSaved(fallback === '1')
+        } else if (!savedRes.error) {
+          setSavedUsesFallback(false)
+          setIsSaved(Boolean(savedRes.data))
+        }
+      }
+
       setIsLoading(false)
     }
 
@@ -175,6 +259,111 @@ export default function MarketplaceDetail() {
     navigate('/marketplace')
   }
 
+  const handleToggleSave = async () => {
+    if (!currentUserId || !listing || isSaving) return
+
+    setIsSaving(true)
+    setSaveError('')
+    const nextSaved = !isSaved
+
+    if (savedUsesFallback) {
+      const key = `saved:${currentUserId}:listing:${listing.id}`
+      if (nextSaved) {
+        window.localStorage.setItem(key, '1')
+      } else {
+        window.localStorage.removeItem(key)
+      }
+      setIsSaved(nextSaved)
+      setIsSaving(false)
+      return
+    }
+
+    if (nextSaved) {
+      const insertRes = await supabase.from('saved_items').insert({
+        user_id: currentUserId,
+        item_type: 'listing',
+        item_id: listing.id,
+      })
+
+      if (insertRes.error) {
+        if (hasMissingSchemaError(insertRes.error, 'saved_items')) {
+          setSavedUsesFallback(true)
+          window.localStorage.setItem(`saved:${currentUserId}:listing:${listing.id}`, '1')
+          setIsSaved(true)
+        } else {
+          setSaveError('Unable to save listing.')
+        }
+        setIsSaving(false)
+        return
+      }
+      setIsSaved(true)
+      setIsSaving(false)
+      return
+    }
+
+    const deleteRes = await supabase
+      .from('saved_items')
+      .delete()
+      .eq('user_id', currentUserId)
+      .eq('item_type', 'listing')
+      .eq('item_id', listing.id)
+
+    if (deleteRes.error) {
+      if (hasMissingSchemaError(deleteRes.error, 'saved_items')) {
+        setSavedUsesFallback(true)
+        window.localStorage.removeItem(`saved:${currentUserId}:listing:${listing.id}`)
+        setIsSaved(false)
+      } else {
+        setSaveError('Unable to remove saved listing.')
+      }
+      setIsSaving(false)
+      return
+    }
+
+    setIsSaved(false)
+    setIsSaving(false)
+  }
+
+  const getConversationIdFromRpc = (data: unknown) => {
+    if (typeof data === 'string') return data
+    if (Array.isArray(data)) {
+      return (data[0] as { conversation_id?: string } | undefined)?.conversation_id ?? ''
+    }
+    if (data && typeof data === 'object' && 'conversation_id' in data) {
+      return (data as { conversation_id?: string }).conversation_id ?? ''
+    }
+    return ''
+  }
+
+  const handleContactSeller = async () => {
+    if (!currentUserId || currentUserId === listing.seller_id) {
+      return
+    }
+
+    setIsContactLoading(true)
+    setContactError('')
+
+    const { data, error } = await supabase.rpc('get_or_create_conversation', {
+      user_a: currentUserId,
+      user_b: listing.seller_id,
+    })
+
+    if (error) {
+      setContactError('Unable to open chat with seller.')
+      setIsContactLoading(false)
+      return
+    }
+
+    const conversationId = getConversationIdFromRpc(data)
+    if (!conversationId) {
+      setContactError('Conversation not found.')
+      setIsContactLoading(false)
+      return
+    }
+
+    navigate(`/chats?c=${conversationId}`)
+  }
+
   return (
     <section className="space-y-6">
       <header className="space-y-2">
@@ -236,22 +425,55 @@ export default function MarketplaceDetail() {
           Ενέργειες αγγελίας
         </h2>
 
-        <button
-          className="mt-3 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-          type="button"
-        >
-          Επικοινωνία με τον πωλητή
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            type="button"
+            onClick={handleContactSeller}
+            disabled={isSeller || isContactLoading}
+          >
+            {isContactLoading ? 'Άνοιγμα συνομιλίας...' : 'Επικοινωνία με τον πωλητή'}
+          </button>
+          {!isSeller ? (
+            <button
+              className="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              type="button"
+              onClick={handleToggleSave}
+              disabled={isSaving}
+            >
+              {isSaving
+                ? 'Αποθήκευση...'
+                : isSaved
+                  ? 'Αφαιρέθηκε από αποθηκευμένα'
+                  : 'Αποθήκευση αγγελίας'}
+            </button>
+          ) : null}
+        </div>
+
+        {contactError ? (
+          <p className="mt-3 text-sm text-rose-700">{contactError}</p>
+        ) : null}
+        {saveError ? <p className="mt-2 text-sm text-rose-700">{saveError}</p> : null}
+        {savedUsesFallback ? (
+          <p className="mt-2 text-xs text-amber-700">
+            Το save δουλεύει προσωρινά τοπικά μέχρι να εφαρμοστούν τα migrations.
+          </p>
+        ) : null}
 
         {isSeller ? (
-          <button
-            className="mt-3 inline-flex items-center rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? 'Διαγραφή σε εξέλιξη...' : 'Διαγραφή αγγελίας'}
-          </button>
+          <>
+            <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+              {`${listing.view_count ?? 0} people viewed your listing`}
+            </p>
+            <button
+              className="mt-3 inline-flex items-center rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Διαγραφή σε εξέλιξη...' : 'Διαγραφή αγγελίας'}
+            </button>
+          </>
         ) : null}
       </div>
     </section>

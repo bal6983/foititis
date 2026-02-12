@@ -20,6 +20,7 @@ import Chats from './pages/Chats'
 import AuthCallback from './pages/AuthCallback'
 import Signup from './pages/Signup'
 import Students from './pages/Students'
+import Saved from './pages/Saved'
 import WantedDetail from './pages/WantedDetail'
 import Verification from './pages/Verification'
 import ProtectedRoute from './routes/ProtectedRoute'
@@ -63,6 +64,7 @@ function App() {
             <Route path="groups" element={<Groups />} />
             <Route path="notes" element={<Notes />} />
             <Route path="events" element={<Events />} />
+            <Route path="saved" element={<Saved />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profile/edit" element={<ProfileEdit />} />
             <Route path="/profile/:id" element={<PublicProfile />} />

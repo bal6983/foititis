@@ -14,6 +14,7 @@ export type UnifiedMarketplaceItem = {
   sellerLevel: number
   sellerVerified: boolean
   createdAt: string
+  isSaved?: boolean
 }
 
 export type CreateMarketplaceItemInput = {

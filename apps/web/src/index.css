@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,29 +6,32 @@
 
 @layer base {
   :root {
-    --bg-primary: #0f172a;
-    --bg-secondary: #0b1223;
-    --surface-card: rgba(255, 255, 255, 0.05);
-    --surface-elevated: rgba(255, 255, 255, 0.08);
-    --surface-soft: rgba(148, 163, 184, 0.16);
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --border-primary: rgba(148, 163, 184, 0.3);
-    --accent: #3b82f6;
-    --accent-secondary: #22d3ee;
+    --bg-primary: #0b1120;
+    --bg-secondary: #0f1a32;
+    --surface-card: rgba(255, 255, 255, 0.06);
+    --surface-elevated: rgba(255, 255, 255, 0.1);
+    --surface-soft: rgba(148, 163, 184, 0.18);
+    --text-primary: #ecf1ff;
+    --text-secondary: #9fb2d4;
+    --border-primary: rgba(148, 163, 184, 0.24);
+    --accent: #4f9bff;
+    --accent-secondary: #1fd4d3;
     --success: #22c55e;
     --danger: #ef4444;
+    --glow-pink: rgba(244, 114, 182, 0.28);
+    --glow-cyan: rgba(34, 211, 238, 0.24);
+    --glow-blue: rgba(59, 130, 246, 0.26);
   }
 
   html:not(.dark) {
-    --bg-primary: #eef2ff;
-    --bg-secondary: #f8fafc;
-    --surface-card: rgba(255, 255, 255, 0.82);
+    --bg-primary: #eef6ff;
+    --bg-secondary: #f8fbff;
+    --surface-card: rgba(255, 255, 255, 0.86);
     --surface-elevated: rgba(255, 255, 255, 0.96);
-    --surface-soft: rgba(148, 163, 184, 0.1);
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --border-primary: rgba(148, 163, 184, 0.32);
+    --surface-soft: rgba(120, 148, 191, 0.13);
+    --text-primary: #101a31;
+    --text-secondary: #4b628a;
+    --border-primary: rgba(105, 132, 173, 0.28);
   }
 
   html,
@@ -38,12 +41,14 @@
   }
 
   html {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Sora', 'Manrope', sans-serif;
     color: var(--text-primary);
     background:
-      radial-gradient(1200px 600px at 80% -5%, rgba(59, 130, 246, 0.22), transparent 55%),
-      radial-gradient(900px 540px at -5% 20%, rgba(34, 211, 238, 0.16), transparent 52%),
+      radial-gradient(1100px 620px at 90% -4%, rgba(31, 212, 211, 0.2), transparent 54%),
+      radial-gradient(1000px 620px at -4% 8%, rgba(79, 155, 255, 0.24), transparent 50%),
+      radial-gradient(780px 480px at 50% 115%, rgba(255, 132, 107, 0.18), transparent 56%),
       linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+    background-attachment: fixed;
     transition: background-color 220ms ease, color 220ms ease;
   }
 
@@ -51,10 +56,25 @@
     @apply antialiased;
     color: var(--text-primary);
     background: transparent;
+    position: relative;
     transition:
       background-color 220ms ease,
       color 220ms ease,
       border-color 220ms ease;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -10% -14%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(640px 420px at 12% 30%, var(--glow-pink), transparent 62%),
+      radial-gradient(760px 460px at 82% 26%, var(--glow-cyan), transparent 66%),
+      radial-gradient(720px 420px at 52% 88%, var(--glow-blue), transparent 64%);
+    filter: blur(24px);
+    animation: ambient-drift 20s ease-in-out infinite alternate;
   }
 
   *,
@@ -93,5 +113,117 @@
     color: var(--text-secondary);
     background: var(--surface-soft);
   }
+
+  /* Social-first card: softer, with hover lift */
+  .social-card {
+    border: 1px solid var(--border-primary);
+    border-radius: 1.35rem;
+    background: var(--surface-card);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 10px 26px rgba(8, 16, 37, 0.16);
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .social-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 34px rgba(8, 16, 37, 0.2);
+  }
+
+  .nav-pill {
+    border-radius: 0.9rem;
+    padding: 0.58rem 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.56rem;
+  }
+
+  .nav-pill-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    background: color-mix(in oklab, var(--accent) 60%, white 40%);
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 20%, transparent);
+  }
+
+  .ambient-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(18px);
+    opacity: 0.58;
+    pointer-events: none;
+    animation: ambient-float 9s ease-in-out infinite;
+  }
+
+  .feed-card {
+    animation: slide-up 320ms ease both;
+  }
+
+  .chat-surface {
+    background:
+      radial-gradient(560px 240px at 8% -8%, rgba(34, 211, 238, 0.16), transparent 62%),
+      radial-gradient(640px 280px at 92% 104%, rgba(244, 114, 182, 0.14), transparent 64%);
+  }
+
+  /* Avatar ring accent */
+  .avatar-ring {
+    border: 2px solid var(--accent);
+    border-radius: 9999px;
+    padding: 2px;
+  }
+
+  /* Notification bubble with pop animation */
+  .notification-bubble {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: notification-pop 300ms ease, notification-float 2200ms ease-in-out infinite;
+  }
 }
 
+/* Animations */
+@keyframes notification-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes notification-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes ambient-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.02); }
+}
+
+@keyframes ambient-drift {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(1.5%, -1.5%, 0); }
+}
