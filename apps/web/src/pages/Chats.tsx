@@ -293,7 +293,7 @@ export default function Chats() {
           .maybeSingle()
 
         if (lastMessage) {
-          const typed = lastMessage as Omit<MessageRow, 'image_url'> & { image_url?: string | null }
+          const typed = lastMessage as unknown as Omit<MessageRow, 'image_url'> & { image_url?: string | null }
           lastMessageByConversation.set(conversation.id, {
             ...typed,
             image_url: typed.image_url ?? null,
@@ -402,12 +402,12 @@ export default function Chats() {
     if (messagesRes.error && imageSupport && hasMissingSchemaError(messagesRes.error, 'image_url')) {
       imageSupport = false
       setSupportsMessageImages(false)
-      messagesRes = await supabase
+      messagesRes = (await supabase
         .from('messages')
         .select(withoutImage)
         .eq('conversation_id', selectedConversationId)
         .order('created_at', { ascending: false })
-        .limit(messageLimit)
+        .limit(messageLimit)) as unknown as typeof messagesRes
     }
 
     if (messagesRes.error) {
@@ -417,7 +417,7 @@ export default function Chats() {
       return
     }
 
-    const normalized = ((messagesRes.data ?? []) as Array<
+    const normalized = ((messagesRes.data ?? []) as unknown as Array<
       Omit<MessageRow, 'image_url'> & { image_url?: string | null }
     >).map((message) => ({
       ...message,
@@ -772,7 +772,7 @@ export default function Chats() {
       return
     }
 
-    const typedResult = insertedRes.data as Omit<MessageRow, 'image_url'> & { image_url?: string | null }
+    const typedResult = insertedRes.data as unknown as Omit<MessageRow, 'image_url'> & { image_url?: string | null }
     const typedMessage: MessageRow = {
       ...typedResult,
       image_url: typedResult.image_url ?? null,
