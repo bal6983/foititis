@@ -9,6 +9,7 @@ export type UnifiedMarketplaceItem = {
   category: string
   condition: string
   price: string | null
+  primaryImageUrl: string | null
   universityName: string
   sellerName: string
   sellerLevel: number

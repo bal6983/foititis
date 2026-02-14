@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CreateItemModal from '../components/marketplace/CreateItemModal'
 import FilterTabs, { type ListingFilter } from '../components/marketplace/FilterTabs'
@@ -9,6 +9,7 @@ import type {
 } from '../components/marketplace/types'
 import SectionCard from '../components/ui/SectionCard'
 import { useI18n, type LocalizedMessage } from '../lib/i18n'
+import { compressImageFile } from '../lib/imageUpload'
 import { supabase } from '../lib/supabaseClient'
 
 type ListingRow = {
@@ -21,6 +22,8 @@ type ListingRow = {
   condition_rating: number | null
   created_at: string
   seller_id: string
+  image_url: string | null
+  image_urls: string[] | null
 }
 
 type WantedRow = {
@@ -230,7 +233,7 @@ export default function Marketplace() {
       supabase
         .from('listings')
         .select(
-          'id, title, description, price, category, condition, condition_rating, created_at, seller_id',
+          'id, title, description, price, category, condition, condition_rating, created_at, seller_id, image_url, image_urls',
         )
         .order('created_at', { ascending: false }),
       supabase
@@ -290,6 +293,8 @@ export default function Marketplace() {
       ...sellRows.map((row) => {
         const owner = profileMap.get(row.seller_id)
         const level = mapLevel(row.seller_id)
+        const listingImages = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : []
+        const primaryImageUrl = listingImages[0] || row.image_url || null
         return {
           id: row.id,
           ownerId: row.seller_id,
@@ -301,6 +306,7 @@ export default function Marketplace() {
             row.condition ||
             getConditionLabel(row.condition_rating),
           price: row.price,
+          primaryImageUrl,
           universityName: owner?.university_id
             ? universityMap.get(owner.university_id) ?? t({ en: 'University', el: 'Πανεπιστήμιο' })
             : t({ en: 'University', el: 'Πανεπιστήμιο' }),
@@ -325,6 +331,7 @@ export default function Marketplace() {
             ? getConditionLabel(row.condition_rating)
             : t({ en: 'Requested', el: 'Ζητείται' }),
           price: null,
+          primaryImageUrl: null,
           universityName: owner?.university_id
             ? universityMap.get(owner.university_id) ?? t({ en: 'University', el: 'Πανεπιστήμιο' })
             : t({ en: 'University', el: 'Πανεπιστήμιο' }),
@@ -499,7 +506,12 @@ export default function Marketplace() {
       if (payload.images && payload.images.length > 0) {
         const uploadedUrls: string[] = []
         for (let i = 0; i < payload.images.length; i += 1) {
-          const file = payload.images[i]
+          const file = await compressImageFile(payload.images[i], {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.72,
+            targetBytes: 300 * 1024,
+          })
           const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
           const path = `${currentUserId}/${insertRes.data.id}/${Date.now()}-${i}.${extension}`
           const uploadRes = await supabase.storage
@@ -606,7 +618,7 @@ export default function Marketplace() {
             <p className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               {t({
                 en: 'Verify your university email to unlock full marketplace publishing.',
-                el: 'Επαλήθευσε το πανεπιστημιακό email για πλήρη πρόσβαση.',
+                el: 'Επαλήθευσε το πανεπιστημιακό email για πλήρη πρόσβαση δημοσίευσης.',
               })}
             </p>
           ) : null}
@@ -615,7 +627,7 @@ export default function Marketplace() {
             <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               {t({
                 en: 'Saved mode is local until DB migrations are applied.',
-                el: 'Το save λειτουργεί τοπικά μέχρι να εφαρμοστούν τα migrations.',
+                el: 'Η αποθήκευση λειτουργεί τοπικά μέχρι να εφαρμοστούν τα migrations.',
               })}
             </p>
           ) : null}
@@ -635,7 +647,7 @@ export default function Marketplace() {
 
       {!isLoading && !errorMessage ? (
         filteredItems.length > 0 ? (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item) => {
               const itemType: SavedItemType = item.type === 'sell' ? 'listing' : 'wanted'
               const key = toSavedKey(itemType, item.id)
@@ -671,3 +683,4 @@ export default function Marketplace() {
     </section>
   )
 }
+

@@ -441,7 +441,7 @@ export default function OnboardingConfirm() {
             type="text"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Π.χ. nickos"
+            placeholder="π.χ. nickos"
             required
           />
         </label>

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Avatar } from '../components/ui/Avatar'
 import { useI18n } from '../lib/i18n'
@@ -1141,7 +1141,7 @@ export default function Chats() {
           </>
         ) : (
           <div className="grid flex-1 place-items-center px-4">
-            <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'Select a conversation to start chatting.', el: 'Επιλεξε συνομιλια για να ξεκινησεις chat.' })}</p>
+            <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'Select a conversation to start chatting.', el: 'Επίλεξε συνομιλία για να ξεκινήσεις chat.' })}</p>
           </div>
         )}
       </section>

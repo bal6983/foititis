@@ -6,32 +6,55 @@
 
 @layer base {
   :root {
-    --bg-primary: #0b1120;
-    --bg-secondary: #0f1a32;
-    --surface-card: rgba(255, 255, 255, 0.06);
-    --surface-elevated: rgba(255, 255, 255, 0.1);
-    --surface-soft: rgba(148, 163, 184, 0.18);
-    --text-primary: #ecf1ff;
-    --text-secondary: #9fb2d4;
-    --border-primary: rgba(148, 163, 184, 0.24);
-    --accent: #4f9bff;
-    --accent-secondary: #1fd4d3;
-    --success: #22c55e;
-    --danger: #ef4444;
-    --glow-pink: rgba(244, 114, 182, 0.28);
-    --glow-cyan: rgba(34, 211, 238, 0.24);
-    --glow-blue: rgba(59, 130, 246, 0.26);
+    --bg-primary: #0d1117;
+    --bg-secondary: #111820;
+    --surface-card: rgba(255, 255, 255, 0.04);
+    --surface-elevated: rgba(255, 255, 255, 0.07);
+    --surface-soft: rgba(148, 163, 184, 0.1);
+    --text-primary: #e2e8f0;
+    --text-secondary: #8899b0;
+    --border-primary: rgba(148, 163, 184, 0.14);
+    --accent: #6b9fd4;
+    --accent-secondary: #5aadac;
+    --success: #3daa6e;
+    --danger: #d95757;
+    --glow-pink: rgba(200, 120, 160, 0.08);
+    --glow-cyan: rgba(90, 170, 180, 0.06);
+    --glow-blue: rgba(100, 140, 200, 0.08);
+
+    /* Semantic: muted, desaturated palette — signals without screaming */
+    --color-marketplace: #c89440;
+    --color-wanted: #c47a9a;
+    --color-event: #9885c4;
+    --color-trending: #c4915a;
+    --color-live: #5aad82;
+    --color-verified: #5aadac;
+    --color-badge: #c4a24a;
+    --color-liked: #c47a9a;
+    --price-emphasis: #9adcf4;
+    --warning-strong: #f2d27a;
   }
 
   html:not(.dark) {
-    --bg-primary: #eef6ff;
-    --bg-secondary: #f8fbff;
-    --surface-card: rgba(255, 255, 255, 0.86);
-    --surface-elevated: rgba(255, 255, 255, 0.96);
-    --surface-soft: rgba(120, 148, 191, 0.13);
-    --text-primary: #101a31;
-    --text-secondary: #4b628a;
-    --border-primary: rgba(105, 132, 173, 0.28);
+    --bg-primary: #f3f5f8;
+    --bg-secondary: #f8f9fb;
+    --surface-card: rgba(255, 255, 255, 0.82);
+    --surface-elevated: rgba(255, 255, 255, 0.94);
+    --surface-soft: rgba(120, 138, 165, 0.08);
+    --text-primary: #1a2030;
+    --text-secondary: #495a74;
+    --border-primary: rgba(95, 114, 141, 0.26);
+
+    --color-marketplace: #a87a20;
+    --color-wanted: #a85a70;
+    --color-event: #6a5aaa;
+    --color-trending: #b87040;
+    --color-live: #2a8a5a;
+    --color-verified: #1f6f6d;
+    --color-badge: #a88a30;
+    --color-liked: #a85a70;
+    --price-emphasis: #0f6b86;
+    --warning-strong: #9a6f12;
   }
 
   html,
@@ -43,11 +66,7 @@
   html {
     font-family: 'Sora', 'Manrope', sans-serif;
     color: var(--text-primary);
-    background:
-      radial-gradient(1100px 620px at 90% -4%, rgba(31, 212, 211, 0.2), transparent 54%),
-      radial-gradient(1000px 620px at -4% 8%, rgba(79, 155, 255, 0.24), transparent 50%),
-      radial-gradient(780px 480px at 50% 115%, rgba(255, 132, 107, 0.18), transparent 56%),
-      linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+    background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
     background-attachment: fixed;
     transition: background-color 220ms ease, color 220ms ease;
   }
@@ -93,11 +112,10 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(640px 420px at 12% 30%, var(--glow-pink), transparent 62%),
-      radial-gradient(760px 460px at 82% 26%, var(--glow-cyan), transparent 66%),
-      radial-gradient(720px 420px at 52% 88%, var(--glow-blue), transparent 64%);
-    filter: blur(24px);
-    animation: ambient-drift 20s ease-in-out infinite alternate;
+      radial-gradient(800px 500px at 20% 30%, var(--glow-blue), transparent 70%),
+      radial-gradient(700px 400px at 80% 70%, var(--glow-pink), transparent 70%);
+    filter: blur(60px);
+    opacity: 0.5;
   }
 
   *,
@@ -109,6 +127,25 @@
       border-color 220ms ease,
       box-shadow 220ms ease;
   }
+
+  /* Light-mode contrast safety overrides for Tailwind utility colors used across pages */
+  html:not(.dark) .text-cyan-100,
+  html:not(.dark) .text-cyan-200 {
+    color: #165f78 !important;
+  }
+
+  html:not(.dark) .text-emerald-100 {
+    color: #0f5a48 !important;
+  }
+
+  html:not(.dark) .text-amber-100,
+  html:not(.dark) .text-amber-200 {
+    color: #79540a !important;
+  }
+
+  html:not(.dark) .text-blue-100 {
+    color: #1e4f80 !important;
+  }
 }
 
 @layer components {
@@ -116,15 +153,14 @@
     border: 1px solid var(--border-primary);
     border-radius: 1rem;
     background: var(--surface-card);
-    backdrop-filter: blur(14px);
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.2);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   }
 
   .panel-card {
     border: 1px solid var(--border-primary);
     border-radius: 1rem;
     background: var(--surface-elevated);
-    backdrop-filter: blur(10px);
   }
 
   .chip {
@@ -137,19 +173,130 @@
     background: var(--surface-soft);
   }
 
-  /* Social-first card: softer, with hover lift */
+  .badge-pill {
+    border: 1px solid var(--border-primary);
+    border-radius: 9999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 11px;
+    line-height: 1.1;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .badge-pill--neutral {
+    color: var(--text-secondary);
+    background: var(--surface-soft);
+  }
+
+  .badge-pill--sell {
+    color: #d5ebff;
+    border-color: rgba(112, 174, 240, 0.45);
+    background: rgba(66, 135, 219, 0.2);
+  }
+
+  .badge-pill--wanted {
+    color: #d8f3ff;
+    border-color: rgba(96, 193, 214, 0.45);
+    background: rgba(39, 157, 180, 0.2);
+  }
+
+  .badge-pill--verified {
+    color: #c6efe8;
+    border-color: rgba(79, 181, 165, 0.48);
+    background: rgba(66, 173, 154, 0.2);
+  }
+
+  .badge-pill--prestudent {
+    color: #f8df9e;
+    border-color: rgba(236, 190, 92, 0.45);
+    background: rgba(196, 139, 28, 0.2);
+  }
+
+  .badge-pill--locked {
+    color: var(--warning-strong);
+    border-color: color-mix(in oklab, var(--warning-strong) 48%, var(--border-primary));
+    background: color-mix(in oklab, var(--warning-strong) 20%, transparent);
+  }
+
+  .price-emphasis {
+    color: var(--price-emphasis);
+    font-weight: 800;
+  }
+
+  html:not(.dark) .badge-pill--sell {
+    color: #184267;
+    border-color: rgba(50, 118, 186, 0.5);
+    background: rgba(66, 135, 219, 0.14);
+  }
+
+  html:not(.dark) .badge-pill--wanted {
+    color: #125268;
+    border-color: rgba(40, 142, 165, 0.5);
+    background: rgba(39, 157, 180, 0.14);
+  }
+
+  html:not(.dark) .badge-pill--verified {
+    color: #0f5d57;
+    border-color: rgba(39, 134, 118, 0.46);
+    background: rgba(66, 173, 154, 0.14);
+  }
+
+  html:not(.dark) .badge-pill--prestudent {
+    color: #7a5605;
+    border-color: rgba(179, 126, 18, 0.44);
+    background: rgba(210, 157, 48, 0.18);
+  }
+
+  /* Social-first card: flat matte surface with subtle depth */
   .social-card {
     border: 1px solid var(--border-primary);
-    border-radius: 1.35rem;
+    border-radius: 1rem;
     background: var(--surface-card);
-    backdrop-filter: blur(14px);
-    box-shadow: 0 10px 26px rgba(8, 16, 37, 0.16);
-    transition: transform 180ms ease, box-shadow 180ms ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 180ms ease;
   }
 
   .social-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 34px rgba(8, 16, 37, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 6px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .sidebar-shell {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--surface-elevated) 78%, transparent),
+        color-mix(in oklab, var(--surface-card) 92%, transparent)
+      );
+    border-color: color-mix(in oklab, var(--border-primary) 88%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 6px 18px rgba(0, 0, 0, 0.12);
+  }
+
+  .sidebar-profile {
+    background: color-mix(in oklab, var(--surface-soft) 88%, transparent);
+    border: 1px solid color-mix(in oklab, var(--border-primary) 82%, transparent);
+  }
+
+  .sidebar-stat {
+    border: 1px solid color-mix(in oklab, var(--border-primary) 86%, transparent);
+    background: color-mix(in oklab, var(--surface-soft) 84%, transparent);
+  }
+
+  .sidebar-nav-item {
+    border: 1px solid transparent;
+  }
+
+  .sidebar-nav-item:hover {
+    border-color: color-mix(in oklab, var(--border-primary) 86%, transparent);
+  }
+
+  .sidebar-nav-item[aria-current='page'] {
+    border-color: color-mix(in oklab, var(--accent) 24%, var(--border-primary));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
 
   .nav-pill {
@@ -161,31 +308,63 @@
   }
 
   .nav-pill-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.375rem;
+    height: 0.375rem;
     border-radius: 9999px;
     flex-shrink: 0;
-    background: color-mix(in oklab, var(--accent) 60%, white 40%);
-    box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 20%, transparent);
+    background: var(--accent);
+    opacity: 0.6;
   }
 
   .ambient-orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(18px);
-    opacity: 0.58;
+    filter: blur(40px);
+    opacity: 0.15;
     pointer-events: none;
-    animation: ambient-float 9s ease-in-out infinite;
   }
 
   .feed-card {
     animation: slide-up 320ms ease both;
   }
 
+  /* Post-type semantic left accent — subtle visual language for content types */
+  .feed-card--listing {
+    border-left: 2px solid var(--color-marketplace);
+  }
+
+  .feed-card--wanted {
+    border-left: 2px solid var(--color-wanted);
+  }
+
+  .feed-card--badge {
+    border-left: 2px solid var(--color-badge);
+  }
+
+  .feed-card--social {
+    border-left: 2px solid var(--accent);
+  }
+
+  /* Reaction button: liked state with warm pink glow */
+  .reaction-liked {
+    background: color-mix(in oklab, var(--color-liked) 18%, transparent);
+    color: var(--color-liked);
+    border-color: color-mix(in oklab, var(--color-liked) 30%, transparent);
+  }
+
+  /* Nav section divider — campus/personal grouping */
+  .nav-section-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 0.5rem 0.7rem 0.2rem;
+    opacity: 0.6;
+  }
+
   .chat-surface {
-    background:
-      radial-gradient(560px 240px at 8% -8%, rgba(34, 211, 238, 0.16), transparent 62%),
-      radial-gradient(640px 280px at 92% 104%, rgba(244, 114, 182, 0.14), transparent 64%);
+    background: var(--surface-card);
   }
 
   /* Avatar ring accent */
@@ -203,15 +382,14 @@
     min-width: 18px;
     height: 18px;
     border-radius: 9999px;
-    border: 1px solid rgba(255, 255, 255, 0.42);
-    background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 84%, white 16%), color-mix(in oklab, var(--accent-secondary) 72%, white 28%));
-    color: #041327;
+    background: var(--accent);
+    color: #fff;
     font-size: 10px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 6px 18px rgba(34, 211, 238, 0.35);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     animation: notification-pop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
   }
 
@@ -226,8 +404,7 @@
     position: absolute;
     inset: -4px;
     border-radius: 9999px;
-    border: 2px solid color-mix(in oklab, var(--accent-secondary) 72%, white 28%);
-    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent-secondary) 18%, transparent);
+    border: 1.5px solid var(--accent);
     opacity: 0;
     pointer-events: none;
   }
@@ -241,14 +418,12 @@
     animation: dropdown-appear 220ms ease-out;
     transform-origin: top right;
     isolation: isolate;
-    backdrop-filter: blur(18px) saturate(140%);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
   .notification-backdrop {
-    background: color-mix(in oklab, var(--bg-primary) 56%, transparent);
-    backdrop-filter: blur(8px) saturate(120%);
-    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    background: rgba(0, 0, 0, 0.4);
     animation: fade-in 160ms ease-out;
   }
 
@@ -260,20 +435,15 @@
     min-width: 20px;
     height: 20px;
     border-radius: 9999px;
-    border: 1px solid rgba(255, 255, 255, 0.42);
-    background: linear-gradient(
-      135deg,
-      color-mix(in oklab, var(--accent) 84%, white 16%),
-      color-mix(in oklab, var(--accent-secondary) 72%, white 28%)
-    );
-    color: #041327;
+    background: var(--accent);
+    color: #fff;
     font-size: 10px;
     font-weight: 700;
     margin-left: auto;
     padding: 0 5px;
     animation: badge-in 300ms ease;
-    box-shadow: 0 6px 18px rgba(34, 211, 238, 0.28);
   }
+
 }
 
 /* Animations */
@@ -306,13 +476,8 @@
 }
 
 @keyframes ambient-float {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-6px) scale(1.02); }
-}
-
-@keyframes ambient-drift {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(1.5%, -1.5%, 0); }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
 @keyframes burst-ring {
@@ -347,7 +512,7 @@
   animation: heart-burst 420ms cubic-bezier(0.17, 0.89, 0.32, 1.28) both;
 }
 
-/* Shimmer for "new since you left" items — triggers curiosity gap */
+/* Shimmer for "new since you left" items — subtle highlight */
 @keyframes shimmer-edge {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
@@ -365,38 +530,38 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(79, 155, 255, 0.08) 40%,
-    rgba(31, 212, 211, 0.12) 60%,
+    rgba(107, 159, 212, 0.04) 40%,
+    rgba(90, 173, 172, 0.06) 60%,
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: shimmer-edge 2.4s ease-in-out infinite;
+  animation: shimmer-edge 3s ease-in-out infinite;
   pointer-events: none;
   z-index: 0;
 }
 
-/* Streak fire glow — identity reinforcement */
+/* Streak indicator — subtle warmth */
 @keyframes streak-glow {
-  0%, 100% { filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.4)); }
-  50% { filter: brightness(1.15) drop-shadow(0 0 8px rgba(251, 146, 60, 0.6)); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
 }
 
 .streak-fire {
-  animation: streak-glow 2s ease-in-out infinite;
+  animation: streak-glow 2.5s ease-in-out infinite;
 }
 
-/* Live pulse for campus pulse header — creates urgency */
+/* Live pulse for campus pulse header — calm presence indicator */
 @keyframes live-breathe {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .pulse-live-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 9999px;
-  background: #22c55e;
-  animation: live-breathe 1.8s ease-in-out infinite;
+  background: var(--color-live);
+  animation: live-breathe 2.4s ease-in-out infinite;
 }
 
 /* Counter tick animation — progress loop satisfaction */
@@ -410,9 +575,9 @@
   animation: count-tick 300ms ease;
 }
 
-/* FOMO ribbon — subtle "you're missing out" indicator */
+/* Missed posts indicator */
 .fomo-ribbon {
-  background: linear-gradient(90deg, rgba(79, 155, 255, 0.12), rgba(31, 212, 211, 0.12));
+  background: var(--surface-soft);
   border-left: 2px solid var(--accent);
   padding: 0.5rem 0.75rem;
   border-radius: 0 0.5rem 0.5rem 0;
@@ -433,7 +598,6 @@
 .level-progress-fill {
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #3b82f6, #22d3ee);
+  background: var(--accent);
   transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
-  box-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
 }

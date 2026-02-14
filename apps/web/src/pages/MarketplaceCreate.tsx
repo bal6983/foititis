@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { compressImageFile } from '../lib/imageUpload'
 import { supabase } from '../lib/supabaseClient'
 
 type CategoryOption = {
@@ -228,7 +229,12 @@ export default function MarketplaceCreate() {
       const uploadedUrls: string[] = []
 
       for (let i = 0; i < selectedImages.length; i += 1) {
-        const file = selectedImages[i]
+        const file = await compressImageFile(selectedImages[i], {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 0.72,
+          targetBytes: 300 * 1024,
+        })
         const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
         const path = `${userData.user.id}/${listingId}/${Date.now()}-${i}.${extension}`
         const uploadRes = await supabase.storage
@@ -323,7 +329,7 @@ export default function MarketplaceCreate() {
               type="text"
               value={price}
               onChange={(event) => setPrice(event.target.value)}
-              placeholder="Π.χ. €25"
+              placeholder="π.χ. €25"
             />
           </label>
 

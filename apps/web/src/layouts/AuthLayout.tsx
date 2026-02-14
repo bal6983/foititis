@@ -15,7 +15,7 @@ export default function AuthLayout() {
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 pb-12">
         <div className="mb-8 text-center">
-          <h2 className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-3xl font-bold text-transparent">
+          <h2 className="text-3xl font-bold text-[var(--text-primary)]">
             foititis
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">

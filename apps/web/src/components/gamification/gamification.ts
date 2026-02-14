@@ -48,7 +48,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'academic',
     tier: 'silver',
-    icon: '📘',
+    icon: 'π“',
   },
   {
     id: 'problem-solver',
@@ -59,7 +59,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'academic',
     tier: 'gold',
-    icon: '🧠',
+    icon: 'π§ ',
   },
   {
     id: 'senior-student',
@@ -70,7 +70,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'academic',
     tier: 'bronze',
-    icon: '🎓',
+    icon: 'π“',
   },
   {
     id: 'helpful-member',
@@ -81,7 +81,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'community',
     tier: 'silver',
-    icon: '🤝',
+    icon: 'π¤',
   },
   {
     id: 'active-this-month',
@@ -92,7 +92,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'community',
     tier: 'cyan',
-    icon: '⚡',
+    icon: 'β΅',
   },
   {
     id: 'verified-student',
@@ -103,7 +103,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'community',
     tier: 'gold',
-    icon: '✅',
+    icon: 'β…',
   },
   {
     id: 'trusted-seller',
@@ -114,7 +114,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'marketplace',
     tier: 'silver',
-    icon: '🛍️',
+    icon: 'π›οΈ',
   },
   {
     id: 'ten-trades',
@@ -125,7 +125,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'marketplace',
     tier: 'bronze',
-    icon: '🔁',
+    icon: 'π”',
   },
   {
     id: 'five-star-rated',
@@ -136,7 +136,7 @@ const badgeDefinitions: LocalizedBadgeItem[] = [
     },
     category: 'marketplace',
     tier: 'gold',
-    icon: '⭐',
+    icon: 'β­',
   },
 ]
 

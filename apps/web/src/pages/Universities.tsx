@@ -436,7 +436,7 @@ export default function Universities() {
                   onClick={() => handleUniversitySelect(university.id)}
                   className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold transition ${
                     isActive
-                      ? 'border-cyan-300/70 bg-cyan-400/15 text-cyan-100'
+                      ? 'border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--text-primary)]'
                       : 'border-[var(--border-primary)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
@@ -587,7 +587,7 @@ export default function Universities() {
                           </div>
                         </Link>
 
-                        <span className="rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
+                        <span className="badge-pill badge-pill--verified">
                           {t({ en: 'Verified', el: 'Επαληθευμένος' })}
                         </span>
                       </div>

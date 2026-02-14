@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient'
 type PublicProfileRecord = {
   id: string
   display_name: string | null
+  avatar_url: string | null
   bio: string | null
   school_id: string | null
   university_id: string | null
@@ -71,6 +72,7 @@ export default function PublicProfile() {
   const [followLoading, setFollowLoading] = useState(false)
   const [conversationLoading, setConversationLoading] = useState(false)
   const [conversationError, setConversationError] = useState('')
+  const [isAvatarZoomOpen, setIsAvatarZoomOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -108,7 +110,7 @@ export default function PublicProfile() {
       const profileWithSocialRes = await supabase
         .from('public_profiles')
         .select(
-          'id, display_name, bio, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student, followers_count, following_count',
+          'id, display_name, avatar_url, bio, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student, followers_count, following_count',
         )
         .eq('id', id)
         .maybeSingle()
@@ -120,7 +122,7 @@ export default function PublicProfile() {
         const profileLegacyRes = await supabase
           .from('public_profiles')
           .select(
-            'id, display_name, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student',
+            'id, display_name, avatar_url, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student',
           )
           .eq('id', id)
           .maybeSingle()
@@ -131,6 +133,7 @@ export default function PublicProfile() {
               followers_count: 0,
               following_count: 0,
               bio: null,
+              avatar_url: null,
             } as PublicProfileRecord)
           : null
         profileError = profileLegacyRes.error
@@ -344,7 +347,16 @@ export default function PublicProfile() {
       <header className="social-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Avatar name={displayName} size="lg" showRing />
+            <button
+              type="button"
+              onClick={() => {
+                if (!profile.avatar_url) return
+                setIsAvatarZoomOpen(true)
+              }}
+              className="rounded-full"
+            >
+              <Avatar name={displayName} url={profile.avatar_url} size="lg" showRing />
+            </button>
             <div>
               <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{displayName}</h1>
               <p className="mt-1 text-xs text-[var(--text-secondary)]">
@@ -442,6 +454,20 @@ export default function PublicProfile() {
             </div>
           )}
         </section>
+      ) : null}
+
+      {isAvatarZoomOpen ? (
+        <button
+          type="button"
+          onClick={() => setIsAvatarZoomOpen(false)}
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4"
+        >
+          <img
+            src={profile.avatar_url ?? ''}
+            alt={displayName}
+            className="max-h-[86vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl"
+          />
+        </button>
       ) : null}
     </section>
   )

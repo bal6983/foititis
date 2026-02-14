@@ -152,24 +152,35 @@ export default function AppLayout() {
 
   const leftNavItems = useMemo(
     () => [
-      { to: '/dashboard', label: t({ en: 'Feed', el: 'Ροη' }) },
-      { to: '/universities', label: t({ en: 'Universities', el: 'Πανεπιστήμια' }) },
-      { to: '/marketplace', label: t({ en: 'Marketplace', el: 'Αγορα' }) },
+      { to: '/dashboard', label: t({ en: 'Feed', el: 'Ροη' }), section: 'campus' as const },
+      { to: '/universities', label: t({ en: 'Universities', el: 'Πανεπιστήμια' }), section: 'campus' as const },
+      { to: '/marketplace', label: t({ en: 'Marketplace', el: 'Αγορα' }), section: 'campus' as const },
       {
         to: '/chats',
         label: t({ en: 'Messages', el: 'Μηνυματα' }),
         count: unreadMessagesCount,
+        section: 'connect' as const,
       },
-      { to: '/events', label: t({ en: 'Events', el: 'Εκδηλωσεις' }) },
-      { to: '/notes', label: t({ en: 'Notes', el: 'Σημειωσεις' }) },
+      { to: '/events', label: t({ en: 'Events', el: 'Εκδηλωσεις' }), section: 'connect' as const },
+      { to: '/notes', label: t({ en: 'Notes', el: 'Σημειωσεις' }), section: 'personal' as const },
       {
         to: '/saved',
         label: t({ en: 'Saved', el: 'Αποθηκευμενα' }),
         count: savedItemsCount,
+        section: 'personal' as const,
       },
-      { to: '/profile', label: t({ en: 'Profile', el: 'Προφιλ' }) },
+      { to: '/profile', label: t({ en: 'Profile', el: 'Προφιλ' }), section: 'personal' as const },
     ],
     [savedItemsCount, t, unreadMessagesCount],
+  )
+
+  const navSectionLabels: Record<string, string> = useMemo(
+    () => ({
+      campus: t({ en: 'Campus', el: 'Campus' }),
+      connect: t({ en: 'Connect', el: 'Σύνδεση' }),
+      personal: t({ en: 'Personal', el: 'Προσωπικά' }),
+    }),
+    [t],
   )
 
   const statusText = isVerifiedStudent
@@ -754,7 +765,7 @@ export default function AppLayout() {
 
   const notificationDropdown = (
     <div
-      className="notification-dropdown fixed z-[140] w-[360px] max-w-[88vw] rounded-2xl border border-[var(--border-primary)] bg-[color:var(--surface-elevated)]/98 p-3 shadow-[0_26px_52px_rgba(5,10,24,0.45)] ring-1 ring-white/10"
+      className="notification-dropdown fixed z-[140] w-[360px] max-w-[88vw] rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)]"
       style={{
         left: notificationPanelPosition?.left ?? Math.max(12, window.innerWidth - 360 - 14),
         top: notificationPanelPosition?.top ?? 70,
@@ -827,11 +838,7 @@ export default function AppLayout() {
 
   return (
     <div className="relative min-h-screen pb-16 text-[var(--text-primary)] md:pb-6">
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <span className="ambient-orb left-[-10%] top-[10%] h-52 w-52 bg-cyan-400/40" />
-        <span className="ambient-orb right-[-6%] top-[26%] h-72 w-72 bg-blue-500/35 [animation-delay:1.5s]" />
-        <span className="ambient-orb bottom-[-8%] left-[32%] h-64 w-64 bg-pink-400/35 [animation-delay:0.8s]" />
-      </div>
+      {/* ambient layer removed — matte surface */}
 
       <div className="mx-auto w-full max-w-[1720px] px-3 py-3 md:px-5 md:py-5">
         <header className="mb-4 flex items-center justify-between gap-3 md:hidden">
@@ -874,7 +881,7 @@ export default function AppLayout() {
         <div className="grid gap-4 md:grid-cols-[250px_minmax(0,1fr)_310px]">
           <aside className="hidden md:block">
             <div className="sticky top-4 space-y-4">
-              <section className="social-card p-4">
+              <section className="social-card sidebar-shell p-4">
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{universityName}</p>
@@ -886,7 +893,7 @@ export default function AppLayout() {
                   </div>
                 </div>
 
-                <div className="mb-3 flex items-center gap-3 rounded-2xl bg-[var(--surface-soft)] p-3">
+                <div className="sidebar-profile mb-3 flex items-center gap-3 rounded-2xl p-3">
                   <Avatar name={displayName} url={avatarUrl} size="md" showRing />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
@@ -904,7 +911,7 @@ export default function AppLayout() {
                 </div>
 
                 <div className="mb-4 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2.5 py-2">
+                  <div className="sidebar-stat rounded-xl px-2.5 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                       {t({ en: 'Active now', el: 'Ενεργοί τώρα' })}
                     </p>
@@ -912,7 +919,7 @@ export default function AppLayout() {
                       {activeNowCount}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2.5 py-2">
+                  <div className="sidebar-stat rounded-xl px-2.5 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                       {t({ en: 'Alerts', el: 'Ειδοποιησεις' })}
                     </p>
@@ -922,31 +929,40 @@ export default function AppLayout() {
                   </div>
                 </div>
 
-                <nav className="space-y-1.5">
-                  {leftNavItems.map((item) => (
-                    <NavLink
-                      key={`${item.to}-${item.label}`}
-                      to={item.to}
-                      className={({ isActive }) =>
-                        `nav-pill text-sm font-medium transition ${
-                          isActive
-                            ? 'bg-gradient-to-r from-blue-500/90 via-sky-400/85 to-cyan-300/85 text-slate-950 shadow-[0_10px_24px_rgba(56,189,248,0.35)]'
-                            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
-                        }`
-                      }
-                    >
-                      <span className="nav-pill-dot" />
-                      <span className="truncate">{item.label}</span>
-                      {item.to === '/saved' && item.count && item.count > 0 ? (
-                        <span className="ml-auto text-xs font-semibold text-[var(--text-secondary)]">
-                          ({Math.min(item.count, 999)})
-                        </span>
-                      ) : null}
-                      {item.to === '/chats' && item.count && item.count > 0 ? (
-                        <span className="nav-badge">{Math.min(item.count, 99)}</span>
-                      ) : null}
-                    </NavLink>
-                  ))}
+                <nav className="space-y-1">
+                  {leftNavItems.map((item, navIndex) => {
+                    const prevSection = navIndex > 0 ? leftNavItems[navIndex - 1].section : null
+                    const showSectionLabel = item.section !== prevSection
+
+                    return (
+                      <div key={`${item.to}-${item.label}`}>
+                        {showSectionLabel ? (
+                          <p className="nav-section-label">{navSectionLabels[item.section]}</p>
+                        ) : null}
+                        <NavLink
+                          to={item.to}
+                          className={({ isActive }) =>
+                            `nav-pill sidebar-nav-item text-sm font-medium transition ${
+                              isActive
+                                ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)]'
+                                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
+                            }`
+                          }
+                        >
+                          <span className="nav-pill-dot" />
+                          <span className="truncate">{item.label}</span>
+                          {item.to === '/saved' && item.count && item.count > 0 ? (
+                            <span className="ml-auto text-xs font-semibold text-[var(--text-secondary)]">
+                              ({Math.min(item.count, 999)})
+                            </span>
+                          ) : null}
+                          {item.to === '/chats' && item.count && item.count > 0 ? (
+                            <span className="nav-badge">{Math.min(item.count, 99)}</span>
+                          ) : null}
+                        </NavLink>
+                      </div>
+                    )
+                  })}
                 </nav>
 
                 <button
@@ -1000,7 +1016,7 @@ export default function AppLayout() {
                       className="flex items-start gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-secondary)]"
                       style={{ animationDelay: `${index * 70}ms` }}
                     >
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)] opacity-50" />
                       <span>{line}</span>
                     </li>
                   ))}
@@ -1024,7 +1040,7 @@ export default function AppLayout() {
                     </span>
                   </div>
                   <div className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-[pulse-soft_1.8s_ease-in-out_infinite]" />
+                    <span className="pulse-live-dot" />
                     <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {activeNowCount}{' '}
                       <span className="font-normal text-[var(--text-secondary)]">
@@ -1116,7 +1132,7 @@ export default function AppLayout() {
                       onClick={() => setSuggestionFilter(chip.key)}
                       className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
                         suggestionFilter === chip.key
-                          ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
+                          ? 'bg-[var(--accent)] text-white'
                           : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                       }`}
                     >
@@ -1184,10 +1200,10 @@ export default function AppLayout() {
                             <button
                               type="button"
                               onClick={() => handleToggleFollow(suggestion.id)}
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                                 isFollowing
                                   ? 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
-                                  : 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
+                                  : 'bg-[var(--accent)] text-white'
                               }`}
                             >
                               {isFollowing
@@ -1195,7 +1211,7 @@ export default function AppLayout() {
                                 : t({ en: 'Follow', el: 'Ακολουθησε' })}
                             </button>
                           ) : (
-                            <span className="text-[10px] font-semibold text-amber-200">
+                            <span className="badge-pill badge-pill--locked">
                               {t({ en: 'Locked', el: 'Κλειδωμενο' })}
                             </span>
                           )}
@@ -1252,7 +1268,7 @@ export default function AppLayout() {
         </>
       ) : null}
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-primary)] bg-[color:var(--bg-secondary)]/90 backdrop-blur md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)] md:hidden">
         <nav className="mx-auto flex max-w-lg items-center justify-around px-2 py-2">
           <NavLink
             to="/dashboard"
@@ -1318,4 +1334,3 @@ export default function AppLayout() {
     </div>
   )
 }
-

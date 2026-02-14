@@ -635,13 +635,19 @@ export default function Students() {
                         : t({ en: 'Follow', el: 'Ακολούθησε' })}
                     </button>
                   ) : (
-                    <span className="text-[10px] font-semibold text-amber-200">
+                    <span className="badge-pill badge-pill--locked">
                       {t({ en: 'Locked', el: 'Κλειδωμένο' })}
                     </span>
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                  <span className="rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-0.5">
+                  <span
+                    className={
+                      peer.is_verified_student === true && peer.is_pre_student !== true
+                        ? 'badge-pill badge-pill--verified'
+                        : 'badge-pill badge-pill--prestudent'
+                    }
+                  >
                     {peer.study_year
                       ? t({ en: `Year ${peer.study_year}`, el: `Έτος ${peer.study_year}` })
                       : t({ en: 'Campus', el: 'Campus' })}

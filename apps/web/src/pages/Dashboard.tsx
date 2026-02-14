@@ -745,9 +745,7 @@ export default function Dashboard() {
 
   return (
     <section className="space-y-4">
-      <header className="social-card relative space-y-3 overflow-hidden p-5">
-        <span className="ambient-orb right-[-24px] top-[-42px] h-28 w-28 bg-cyan-400/35" />
-        <span className="ambient-orb bottom-[-48px] left-[-16px] h-24 w-24 bg-blue-500/30 [animation-delay:1.1s]" />
+      <header className="social-card space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
@@ -759,18 +757,18 @@ export default function Dashboard() {
                 el: 'Δες τι κανουν οι φοιτητες στο πανεπιστημιο σου τωρα.',
               })}
             </p>
-            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/35 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-100">
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-[pulse-soft_1.6s_ease-in-out_infinite]" />
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+              <span className="pulse-live-dot" />
               {t({ en: 'Live student activity', el: 'Live φοιτητικη δραστηριοτητα' })}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                 filter === 'all'
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
-                  : 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
               onClick={() => setFilter('all')}
             >
@@ -779,10 +777,10 @@ export default function Dashboard() {
             {isVerifiedStudent && !isPreStudent && supportsFollowSystem ? (
               <button
                 type="button"
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                   filter === 'following'
-                    ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
-                    : 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
                 onClick={() => setFilter('following')}
               >
@@ -791,10 +789,10 @@ export default function Dashboard() {
             ) : null}
             <button
               type="button"
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                 filter === 'university'
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
-                  : 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
               onClick={() => setFilter('university')}
             >
@@ -808,7 +806,7 @@ export default function Dashboard() {
         </p>
 
         {isPreStudent ? (
-          <p className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          <p className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-secondary)]">
             {t({
               en: 'Pre-student mode: feed is view-only. Verify your student status to like, comment, and follow.',
               el: 'Λειτουργια pre-student: μονο προβολη στη ροη. Κανε verification για like, σχολιο και follow.',
@@ -816,7 +814,7 @@ export default function Dashboard() {
           </p>
         ) : null}
         {!supportsFeedInteractions ? (
-          <p className="rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+          <p className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-secondary)]">
             {t({
               en: 'Legacy mode: activity is built from listings while social tables are not yet enabled.',
               el: 'Legacy mode: η ροη γεμιζει απο αγγελιες μεχρι να ενεργοποιηθουν τα social tables.',
@@ -844,7 +842,7 @@ export default function Dashboard() {
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+              <span className="rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
                 {storyHighlights.length} {t({ en: 'active today', el: 'ενεργοί σήμερα' })}
               </span>
               <span className="text-[11px] font-semibold text-[var(--text-secondary)]">
@@ -853,21 +851,29 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
-            {storyHighlights.map((story) => (
-              <Link
-                key={story.id}
-                to={story.href}
-                className="group min-w-[80px] rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-2 text-center hover:border-cyan-300/45"
-              >
-                <div className="mx-auto mb-1 w-max rounded-full bg-gradient-to-r from-cyan-300 to-blue-500 p-[2px]">
-                  <Avatar name={story.name} url={story.avatar} size="md" />
-                </div>
-                <p className="truncate text-[11px] font-semibold text-[var(--text-primary)]">
-                  {story.name}
-                </p>
-                <p className="text-[10px] text-[var(--text-secondary)]">{story.timeLabel}</p>
-              </Link>
-            ))}
+            {storyHighlights.map((story, storyIndex) => {
+              const ringColor = storyIndex < 3
+                ? 'border-[var(--accent)]'
+                : storyIndex < 6
+                  ? 'border-[var(--accent-secondary)]'
+                  : 'border-[var(--border-primary)]'
+
+              return (
+                <Link
+                  key={story.id}
+                  to={story.href}
+                  className="group min-w-[80px] rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-2 text-center transition hover:bg-[var(--surface-elevated)]"
+                >
+                  <div className={`mx-auto mb-1 w-max rounded-full border-2 ${ringColor} p-[2px]`}>
+                    <Avatar name={story.name} url={story.avatar} size="md" />
+                  </div>
+                  <p className="truncate text-[11px] font-semibold text-[var(--text-primary)]">
+                    {story.name}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-secondary)]">{story.timeLabel}</p>
+                </Link>
+              )
+            })}
           </div>
         </section>
       ) : null}
@@ -887,21 +893,31 @@ export default function Dashboard() {
             const comments = commentsByPost[post.id] ?? []
             const expanded = expandedComments[post.id] ?? false
             const visibleComments = expanded ? comments : comments.slice(-2)
-            const accentBarClasses =
+            const postTypeClass =
               post.actionHref.startsWith('/marketplace/')
-                ? 'from-blue-500 via-cyan-400 to-emerald-300'
+                ? 'feed-card--listing'
                 : post.actionHref.includes('view=want')
-                  ? 'from-pink-400 via-fuchsia-400 to-violet-400'
-                  : 'from-sky-400 via-indigo-400 to-cyan-300'
+                  ? 'feed-card--wanted'
+                  : post.actionHref.includes('/profile/')
+                    ? 'feed-card--badge'
+                    : 'feed-card--social'
+            const accentBarColor =
+              post.actionHref.startsWith('/marketplace/')
+                ? 'var(--color-marketplace)'
+                : post.actionHref.includes('view=want')
+                  ? 'var(--color-wanted)'
+                  : post.actionHref.includes('/profile/')
+                    ? 'var(--color-badge)'
+                    : 'var(--accent)'
             const isFresh = Date.now() - new Date(post.createdAt).getTime() < 30 * 60 * 1000
 
             return (
               <article
                 key={post.id}
-                className={`feed-card social-card overflow-hidden p-0${isFresh ? ' new-content-shimmer' : ''}`}
+                className={`feed-card social-card ${postTypeClass} overflow-hidden p-0${isFresh ? ' new-content-shimmer' : ''}`}
                 style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
               >
-                <div className={`h-1.5 bg-gradient-to-r ${accentBarClasses}`} />
+                <div className="h-0.5" style={{ background: accentBarColor }} />
                 <div className="p-5">
                 <header className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
@@ -920,7 +936,7 @@ export default function Dashboard() {
                           {post.authorUniversityName}
                         </span>
                         {post.authorIsVerified ? (
-                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                          <span className="badge-pill badge-pill--verified">
                             {t({ en: 'Verified', el: 'Επαληθευμενος' })}
                           </span>
                         ) : null}
@@ -931,7 +947,7 @@ export default function Dashboard() {
                           {compactTimeAgo(post.createdAt)}
                         </p>
                         {isFresh ? (
-                          <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300">
+                          <span className="rounded-full bg-[var(--surface-soft)] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[color:var(--color-live)]">
                             {t({ en: 'new', el: 'νέο' })}
                           </span>
                         ) : null}
@@ -943,10 +959,10 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => handleToggleFollow(post.authorId)}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                         post.isAuthorFollowed
                           ? 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
-                          : 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
+                          : 'bg-[var(--accent)] text-white'
                       }`}
                     >
                       {post.isAuthorFollowed
@@ -961,7 +977,7 @@ export default function Dashboard() {
                   <p className="text-sm text-[var(--text-secondary)]">{post.detailText}</p>
                   <Link
                     to={post.actionHref}
-                    className="inline-flex items-center rounded-full bg-gradient-to-r from-blue-500/90 to-cyan-400/90 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                    className="inline-flex items-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-elevated)]"
                   >
                     {post.actionLabel}
                   </Link>
@@ -972,15 +988,20 @@ export default function Dashboard() {
                     type="button"
                     onClick={() => handleToggleLike(post.id)}
                     disabled={isPreStudent || !supportsFeedInteractions}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
                       post.hasReacted
-                        ? 'bg-blue-500/20 text-blue-200'
-                        : 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
+                        ? 'reaction-liked border border-[color:var(--color-liked)]/30'
+                        : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[color:var(--color-liked)]/30 hover:text-[color:var(--color-liked)]'
                     }${burstPostId === post.id ? ' reaction-burst' : ''} disabled:cursor-not-allowed disabled:opacity-60`}
                   >
-                    {post.hasReacted
-                      ? t({ en: `Liked (${post.reactionsCount})`, el: `Liked (${post.reactionsCount})` })
-                      : t({ en: `Like (${post.reactionsCount})`, el: `Like (${post.reactionsCount})` })}
+                    <span className={post.hasReacted ? 'text-sm' : 'text-sm opacity-60'}>
+                      {post.hasReacted ? '\u2764\uFE0F' : '\u2661'}
+                    </span>
+                    <span>
+                      {post.reactionsCount > 0
+                        ? post.reactionsCount.toString()
+                        : t({ en: 'Like', el: 'Like' })}
+                    </span>
                   </button>
 
                   <button
@@ -988,9 +1009,14 @@ export default function Dashboard() {
                     onClick={() =>
                       setExpandedComments((previous) => ({ ...previous, [post.id]: !expanded }))
                     }
-                    className="rounded-full border border-[var(--border-primary)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]"
+                    className="flex items-center gap-1.5 rounded-full border border-[var(--border-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   >
-                    {t({ en: `Comments (${post.commentsCount})`, el: `Σχολια (${post.commentsCount})` })}
+                    <span className="text-sm opacity-60">{'\uD83D\uDCAC'}</span>
+                    <span>
+                      {post.commentsCount > 0
+                        ? post.commentsCount.toString()
+                        : t({ en: 'Comment', el: 'Σχόλιο' })}
+                    </span>
                   </button>
                 </div>
 
@@ -1047,7 +1073,7 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => handleCommentSubmit(post.id)}
-                        className="rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950"
+                        className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white"
                       >
                         {t({ en: 'Post', el: 'Δημοσιευση' })}
                       </button>

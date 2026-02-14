@@ -77,7 +77,7 @@ export default function Login() {
         </label>
 
         <button
-          className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="w-full rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           type="submit"
           disabled={isSubmitting}
         >

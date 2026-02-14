@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom'
 import { Avatar } from '../components/ui/Avatar'
 import { useI18n } from '../lib/i18n'
+import { compressImageFile } from '../lib/imageUpload'
 import { supabase } from '../lib/supabaseClient'
 
 type ProfileRow = {
@@ -99,6 +100,7 @@ export default function Profile() {
   const [isAvatarUploading, setIsAvatarUploading] = useState(false)
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
+  const [isAvatarZoomOpen, setIsAvatarZoomOpen] = useState(false)
 
   const [universityName, setUniversityName] = useState('')
   const [schoolName, setSchoolName] = useState('')
@@ -308,12 +310,16 @@ export default function Profile() {
     if (!file || !userId) return
 
     if (!file.type.startsWith('image/')) {
-      setAvatarUploadMessage('Please upload an image file.')
+      setAvatarUploadMessage(
+        t({ en: 'Please upload an image file.', el: 'Ανέβασε αρχείο εικόνας.' }),
+      )
       return
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      setAvatarUploadMessage('Max file size is 2 MB.')
+      setAvatarUploadMessage(
+        t({ en: 'Max file size is 2 MB.', el: 'Το μέγιστο μέγεθος είναι 2 MB.' }),
+      )
       return
     }
 
@@ -328,36 +334,66 @@ export default function Profile() {
     setIsAvatarUploading(true)
     setAvatarUploadMessage('')
 
-    const filePath = `avatars/${userId}.jpg`
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, pendingAvatarFile, { upsert: true, contentType: pendingAvatarFile.type })
+    try {
+      const compressedFile = await compressImageFile(pendingAvatarFile, {
+        maxWidth: 720,
+        maxHeight: 720,
+        quality: 0.72,
+        targetBytes: 160 * 1024,
+      })
 
-    if (uploadError) {
-      setAvatarUploadMessage('Avatar upload failed.')
+      // Policy-compatible path: {auth.uid()}/avatar.jpg
+      const filePath = `${userId}/avatar.jpg`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, compressedFile, { upsert: true, contentType: 'image/jpeg' })
+
+      if (uploadError) {
+        setAvatarUploadMessage(
+          t({
+            en: `Avatar upload failed (${uploadError.message}).`,
+            el: `Η μεταφόρτωση avatar απέτυχε (${uploadError.message}).`,
+          }),
+        )
+        return
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      const publicUrl = `${data.publicUrl}?t=${Date.now()}`
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', userId)
+
+      if (updateError) {
+        setAvatarUploadMessage(
+          t({
+            en: `Profile update failed (${updateError.message}).`,
+            el: `Η ενημέρωση προφίλ απέτυχε (${updateError.message}).`,
+          }),
+        )
+        return
+      }
+
+      setAvatarUrl(publicUrl)
+      setAvatarLoadError(false)
+      setAvatarUploadMessage(
+        t({
+          en: 'Avatar updated successfully.',
+          el: 'Η φωτογραφία προφίλ ενημερώθηκε.',
+        }),
+      )
+      handleAvatarCancel()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t({ en: 'Unexpected upload error.', el: 'Μη αναμενόμενο σφάλμα μεταφόρτωσης.' })
+      setAvatarUploadMessage(message)
+    } finally {
       setIsAvatarUploading(false)
-      return
     }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-    const publicUrl = `${data.publicUrl}?t=${Date.now()}`
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('id', userId)
-
-    if (updateError) {
-      setAvatarUploadMessage('Profile update failed.')
-      setIsAvatarUploading(false)
-      return
-    }
-
-    setAvatarUrl(publicUrl)
-    setAvatarLoadError(false)
-    setAvatarUploadMessage('Avatar updated.')
-    setIsAvatarUploading(false)
-    handleAvatarCancel()
   }
 
   const handleAvatarCancel = () => {
@@ -494,7 +530,21 @@ export default function Profile() {
       <header className="social-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Avatar name={displayName || email} url={avatarLoadError ? null : avatarUrl} size="lg" showRing />
+            <button
+              type="button"
+              onClick={() => {
+                if (!avatarPreviewUrl && (avatarLoadError || !avatarUrl)) return
+                setIsAvatarZoomOpen(true)
+              }}
+              className="rounded-full"
+            >
+              <Avatar
+                name={displayName || email}
+                url={avatarPreviewUrl || (avatarLoadError ? null : avatarUrl)}
+                size="lg"
+                showRing
+              />
+            </button>
             <div>
               <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{displayName || email}</h1>
               <p className="mt-1 text-xs text-[var(--text-secondary)]">
@@ -515,12 +565,12 @@ export default function Profile() {
           <div className="flex flex-wrap gap-2">
             {!avatarPreviewUrl && (
               <label className="cursor-pointer rounded-xl border border-[var(--border-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:border-blue-400/50">
-                {t({ en: 'Change avatar', el: 'Αλλαγη avatar' })}
+                {t({ en: 'Change avatar', el: 'Αλλαγή avatar' })}
                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarSelect} disabled={isAvatarUploading} />
               </label>
             )}
             <Link to="/profile/edit" className="rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950">
-              {t({ en: 'Edit profile', el: 'Επεξεργασια προφιλ' })}
+              {t({ en: 'Edit profile', el: 'Επεξεργασία προφίλ' })}
             </Link>
           </div>
         </div>
@@ -534,14 +584,14 @@ export default function Profile() {
                 disabled={isAvatarUploading}
                 className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
               >
-                {isAvatarUploading ? t({ en: 'Uploading...', el: 'Ανεβασμα...' }) : t({ en: 'Upload', el: 'Ανεβασμα' })}
+                {isAvatarUploading ? t({ en: 'Uploading...', el: 'Ανέβασμα...' }) : t({ en: 'Upload', el: 'Ανέβασμα' })}
               </button>
               <button
                 onClick={handleAvatarCancel}
                 disabled={isAvatarUploading}
                 className="rounded-lg border border-[var(--border-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] disabled:opacity-50"
               >
-                {t({ en: 'Cancel', el: 'Ακυρωση' })}
+                {t({ en: 'Cancel', el: 'Ακύρωση' })}
               </button>
             </div>
           </div>
@@ -617,7 +667,11 @@ export default function Profile() {
               className={`rounded-xl border px-3 py-3 text-left ${badge.unlocked ? 'border-emerald-300/40 bg-emerald-500/10' : 'border-[var(--border-primary)] bg-[var(--surface-soft)]'}`}
             >
               <p className="text-sm font-semibold text-[var(--text-primary)]">{badge.title}</p>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">{badge.unlocked ? t({ en: 'Unlocked', el: 'Ξεκλειδωμενο' }) : t({ en: `Progress ${badge.progress}%`, el: `Προοδος ${badge.progress}%` })}</p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {badge.unlocked
+                  ? t({ en: 'Unlocked', el: 'Ξεκλειδωμένο' })
+                  : t({ en: `Progress ${badge.progress}%`, el: `Πρόοδος ${badge.progress}%` })}
+              </p>
             </button>
           ))}
         </div>
@@ -738,6 +792,20 @@ export default function Profile() {
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {isAvatarZoomOpen ? (
+        <button
+          type="button"
+          onClick={() => setIsAvatarZoomOpen(false)}
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4"
+        >
+          <img
+            src={avatarPreviewUrl || avatarUrl}
+            alt={displayName || email}
+            className="max-h-[86vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl"
+          />
+        </button>
       ) : null}
 
       {selectedBadge ? (
