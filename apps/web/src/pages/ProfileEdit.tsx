@@ -21,6 +21,7 @@ export default function ProfileEdit() {
   const { t } = useI18n()
   const [fullName, setFullName] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [bio, setBio] = useState('')
   const [cityId, setCityId] = useState('')
   const [universityId, setUniversityId] = useState('')
   const [schoolId, setSchoolId] = useState('')
@@ -234,18 +235,31 @@ export default function ProfileEdit() {
 
       setUserId(userData.user.id)
 
-      const { data: profile, error: profileError } = await supabase
+      let profileRes = await supabase
         .from('profiles')
         .select(
-          'full_name, display_name, city_id, university_id, school_id, department_id, is_verified_student',
+          'full_name, display_name, bio, city_id, university_id, school_id, department_id, is_verified_student',
         )
         .eq('id', userData.user.id)
         .maybeSingle()
 
+      if (profileRes.error) {
+        const joined = `${profileRes.error.message ?? ''} ${profileRes.error.details ?? ''}`.toLowerCase()
+        if (joined.includes('bio') && joined.includes('does not exist')) {
+          profileRes = (await supabase
+            .from('profiles')
+            .select(
+              'full_name, display_name, city_id, university_id, school_id, department_id, is_verified_student',
+            )
+            .eq('id', userData.user.id)
+            .maybeSingle()) as typeof profileRes
+        }
+      }
+
       if (!isMounted) return
 
-      if (profileError || !profile) {
-        const details = profileError?.message ? ` (${profileError.message})` : ''
+      if (profileRes.error || !profileRes.data) {
+        const details = profileRes.error?.message ? ` (${profileRes.error.message})` : ''
         setErrorMessage(
           t({
             en: `Unable to load profile.${details}`,
@@ -256,8 +270,20 @@ export default function ProfileEdit() {
         return
       }
 
+      const profile = profileRes.data as {
+        full_name: string | null
+        display_name: string | null
+        bio?: string | null
+        city_id: string | null
+        university_id: string | null
+        school_id: string | null
+        department_id: string | null
+        is_verified_student: boolean | null
+      }
+
       setFullName(profile.full_name ?? '')
       setDisplayName(profile.display_name ?? '')
+      setBio(profile.bio ?? '')
       setCityId(profile.city_id ?? '')
       setUniversityId(profile.university_id ?? '')
       setSchoolId(profile.school_id ?? '')
@@ -301,16 +327,6 @@ export default function ProfileEdit() {
     event.preventDefault()
     setErrorMessage('')
     setSuccessMessage('')
-
-    if (isVerifiedStudent) {
-      setErrorMessage(
-        t({
-          en: 'Verified student profile data is locked. Submit a change request first.',
-          el: 'Τα στοιχεία επαληθευμένου φοιτητή είναι κλειδωμένα. Χρειάζεται πρώτα αίτημα αλλαγής.',
-        }),
-      )
-      return
-    }
 
     const trimmedFullName = fullName.trim()
     const trimmedDisplayName = displayName.trim()
@@ -365,6 +381,7 @@ export default function ProfileEdit() {
       .update({
         full_name: trimmedFullName,
         display_name: trimmedDisplayName,
+        bio: bio.trim() || null,
         city_id: cityId || null,
         university_id: universityId || null,
         school_id: schoolId || null,
@@ -460,6 +477,20 @@ export default function ProfileEdit() {
         </label>
 
         <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'Bio (optional)', el: 'Σύντομο bio (προαιρετικό)' })}
+          <textarea
+            className={`${fieldClass} min-h-[88px] resize-y`}
+            value={bio}
+            onChange={(event) => setBio(event.target.value.slice(0, 280))}
+            placeholder={t({
+              en: 'Write a short line about you...',
+              el: 'Γράψε μια μικρή περιγραφή για εσένα...',
+            })}
+          />
+          <span className="text-xs text-[var(--text-secondary)]">{bio.length}/280</span>
+        </label>
+
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
           {t({ en: 'Study city', el: 'Πόλη σπουδών' })}
           <select
             className={fieldClass}
@@ -538,13 +569,11 @@ export default function ProfileEdit() {
         <button
           className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
-          disabled={isSubmitting || isCoreLocked}
+          disabled={isSubmitting}
         >
           {isSubmitting
             ? t({ en: 'Saving...', el: 'Γίνεται αποθήκευση...' })
-            : isCoreLocked
-              ? t({ en: 'Locked for verified profile', el: 'Κλειδωμένο για verified προφίλ' })
-              : t({ en: 'Save changes', el: 'Αποθήκευση αλλαγών' })}
+            : t({ en: 'Save changes', el: 'Αποθήκευση αλλαγών' })}
         </button>
       </form>
 

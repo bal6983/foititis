@@ -551,7 +551,7 @@ export default function Signup() {
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
           {t({ en: 'Create account', el: 'Δημιουργία λογαριασμού' })}
         </h1>
         <p className="text-sm text-[var(--text-secondary)]">

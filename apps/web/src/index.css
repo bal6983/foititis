@@ -260,13 +260,19 @@
     min-width: 20px;
     height: 20px;
     border-radius: 9999px;
-    background: var(--danger);
-    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    background: linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--accent) 84%, white 16%),
+      color-mix(in oklab, var(--accent-secondary) 72%, white 28%)
+    );
+    color: #041327;
     font-size: 10px;
     font-weight: 700;
     margin-left: auto;
     padding: 0 5px;
     animation: badge-in 300ms ease;
+    box-shadow: 0 6px 18px rgba(34, 211, 238, 0.28);
   }
 }
 
@@ -323,4 +329,111 @@
   0% { transform: scale(0); }
   60% { transform: scale(1.15); }
   100% { transform: scale(1); }
+}
+
+/* ── Habit-forming micro-interactions ── */
+
+/* Like button heart burst: variable reward dopamine trigger */
+@keyframes heart-burst {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.35); }
+  30% { transform: scale(0.9); }
+  45% { transform: scale(1.15); }
+  60% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+.reaction-burst {
+  animation: heart-burst 420ms cubic-bezier(0.17, 0.89, 0.32, 1.28) both;
+}
+
+/* Shimmer for "new since you left" items — triggers curiosity gap */
+@keyframes shimmer-edge {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.new-content-shimmer {
+  position: relative;
+}
+
+.new-content-shimmer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(79, 155, 255, 0.08) 40%,
+    rgba(31, 212, 211, 0.12) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-edge 2.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Streak fire glow — identity reinforcement */
+@keyframes streak-glow {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.4)); }
+  50% { filter: brightness(1.15) drop-shadow(0 0 8px rgba(251, 146, 60, 0.6)); }
+}
+
+.streak-fire {
+  animation: streak-glow 2s ease-in-out infinite;
+}
+
+/* Live pulse for campus pulse header — creates urgency */
+@keyframes live-breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+
+.pulse-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #22c55e;
+  animation: live-breathe 1.8s ease-in-out infinite;
+}
+
+/* Counter tick animation — progress loop satisfaction */
+@keyframes count-tick {
+  0% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-3px); opacity: 0.7; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.count-tick {
+  animation: count-tick 300ms ease;
+}
+
+/* FOMO ribbon — subtle "you're missing out" indicator */
+.fomo-ribbon {
+  background: linear-gradient(90deg, rgba(79, 155, 255, 0.12), rgba(31, 212, 211, 0.12));
+  border-left: 2px solid var(--accent);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  animation: slide-up 320ms ease both;
+}
+
+/* Level progress bar with ambient glow */
+.level-progress-bar {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+  position: relative;
+}
+
+.level-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #3b82f6, #22d3ee);
+  transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
 }

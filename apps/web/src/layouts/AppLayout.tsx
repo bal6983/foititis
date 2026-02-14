@@ -127,9 +127,15 @@ export default function AppLayout() {
   const [activeFollowingPeers, setActiveFollowingPeers] = useState<PeerProfileRow[]>([])
   const [trendingLines, setTrendingLines] = useState<string[]>([])
   const [followSuggestions, setFollowSuggestions] = useState<PeerProfileRow[]>([])
+  const [allRankedPeers, setAllRankedPeers] = useState<PeerProfileRow[]>([])
+  const [suggestionFilter, setSuggestionFilter] = useState<'recommended' | 'university' | 'department'>('recommended')
+  const [currentCityId, setCurrentCityId] = useState<string | null>(null)
+  const [currentDepartmentId, setCurrentDepartmentId] = useState<string | null>(null)
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [supportsFollowSystem, setSupportsFollowSystem] = useState(true)
   const [notifications, setNotifications] = useState<NotificationView[]>([])
+  const [savedItemsCount, setSavedItemsCount] = useState(0)
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isBellPopping, setIsBellPopping] = useState(false)
   const [shellError, setShellError] = useState('')
@@ -149,13 +155,21 @@ export default function AppLayout() {
       { to: '/dashboard', label: t({ en: 'Feed', el: 'Ροη' }) },
       { to: '/universities', label: t({ en: 'Universities', el: 'Πανεπιστήμια' }) },
       { to: '/marketplace', label: t({ en: 'Marketplace', el: 'Αγορα' }) },
-      { to: '/chats', label: t({ en: 'Messages', el: 'Μηνυματα' }) },
+      {
+        to: '/chats',
+        label: t({ en: 'Messages', el: 'Μηνυματα' }),
+        count: unreadMessagesCount,
+      },
       { to: '/events', label: t({ en: 'Events', el: 'Εκδηλωσεις' }) },
       { to: '/notes', label: t({ en: 'Notes', el: 'Σημειωσεις' }) },
-      { to: '/saved', label: t({ en: 'Saved', el: 'Αποθηκευμενα' }) },
+      {
+        to: '/saved',
+        label: t({ en: 'Saved', el: 'Αποθηκευμενα' }),
+        count: savedItemsCount,
+      },
       { to: '/profile', label: t({ en: 'Profile', el: 'Προφιλ' }) },
     ],
-    [t],
+    [savedItemsCount, t, unreadMessagesCount],
   )
 
   const statusText = isVerifiedStudent
@@ -163,6 +177,20 @@ export default function AppLayout() {
     : isPreStudent
       ? t({ en: 'Pre-student', el: 'Προ-φοιτητης' })
       : t({ en: 'Student', el: 'Φοιτητης' })
+
+  const filteredSuggestions = useMemo(() => {
+    if (suggestionFilter === 'recommended') return followSuggestions
+    const pool = allRankedPeers.filter((peer) => {
+      if (suggestionFilter === 'department' && currentDepartmentId) {
+        return peer.department_id === currentDepartmentId
+      }
+      if (suggestionFilter === 'university' && currentCityId) {
+        return peer.city_id === currentCityId
+      }
+      return true
+    })
+    return pool.slice(0, 5)
+  }, [allRankedPeers, currentCityId, currentDepartmentId, followSuggestions, suggestionFilter])
 
   const getNotificationMessage = useCallback(
     (notification: NotificationView) => {
@@ -259,7 +287,7 @@ export default function AppLayout() {
     const email = userData.user.email ?? ''
     setCurrentUserId(userId)
 
-    const { data: profileData, error: profileError } = await supabase
+    let profileResponse = await supabase
       .from('profiles')
       .select(
         'id, display_name, full_name, avatar_url, city_id, university_id, school_id, department_id, study_year, is_verified_student, is_pre_student',
@@ -267,8 +295,18 @@ export default function AppLayout() {
       .eq('id', userId)
       .maybeSingle()
 
-    if (profileError || !profileData) {
-      const details = profileError?.message ? ` (${profileError.message})` : ''
+    if (profileResponse.error && hasMissingSchemaError(profileResponse.error)) {
+      profileResponse = (await supabase
+        .from('profiles')
+        .select(
+          'id, display_name, avatar_url, city_id, university_id, school_id, study_year, is_verified_student, is_pre_student',
+        )
+        .eq('id', userId)
+        .maybeSingle()) as typeof profileResponse
+    }
+
+    if (profileResponse.error || !profileResponse.data) {
+      const details = profileResponse.error?.message ? ` (${profileResponse.error.message})` : ''
       if (!isSilentRefresh) {
         setShellError(
           t({ en: `Unable to load profile${details}.`, el: `Unable to load profile${details}.` }),
@@ -278,7 +316,11 @@ export default function AppLayout() {
       return
     }
 
-    const typedProfile = profileData as ProfileRow
+    const typedProfile = {
+      ...(profileResponse.data as Partial<ProfileRow>),
+      full_name: (profileResponse.data as Partial<ProfileRow>).full_name ?? null,
+      department_id: (profileResponse.data as Partial<ProfileRow>).department_id ?? null,
+    } as ProfileRow
     const resolvedVerified = typedProfile.is_verified_student === true
     const resolvedPreStudent = typedProfile.is_pre_student === true && !resolvedVerified
 
@@ -287,6 +329,8 @@ export default function AppLayout() {
     setStudyYear(typedProfile.study_year ?? null)
     setIsVerifiedStudent(resolvedVerified)
     setIsPreStudent(resolvedPreStudent)
+    setCurrentCityId(typedProfile.city_id ?? null)
+    setCurrentDepartmentId(typedProfile.department_id ?? null)
 
     if (typedProfile.university_id) {
       const { data: universityData } = await supabase
@@ -313,6 +357,31 @@ export default function AppLayout() {
     const notificationsData = hasMissingSchemaError(notificationsResponse.error, 'notifications')
       ? []
       : notificationsResponse.data ?? []
+
+    const [savedItemsCountResponse, unreadMessagesCountResponse] = await Promise.all([
+      supabase
+        .from('saved_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId),
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('notification_type', 'message')
+        .eq('read', false),
+    ])
+
+    if (hasMissingSchemaError(savedItemsCountResponse.error, 'saved_items')) {
+      setSavedItemsCount(0)
+    } else {
+      setSavedItemsCount(savedItemsCountResponse.count ?? 0)
+    }
+
+    if (hasMissingSchemaError(unreadMessagesCountResponse.error, 'notifications')) {
+      setUnreadMessagesCount(0)
+    } else {
+      setUnreadMessagesCount(unreadMessagesCountResponse.count ?? 0)
+    }
 
     const loadPeerRows = async (limit: number, filters: PeerFilters) => {
       let withSocialQuery = supabase
@@ -412,8 +481,10 @@ export default function AppLayout() {
       ? recommendationOnly
       : rankedPeers
 
-    const suggestions = candidatePeers.filter(isVerifiedCampusMember).slice(0, 5)
+    const verifiedCandidates = candidatePeers.filter(isVerifiedCampusMember)
+    const suggestions = verifiedCandidates.slice(0, 5)
 
+    setAllRankedPeers(verifiedCandidates)
     setFollowSuggestions(suggestions)
 
     const peerMap = new Map(peerRows.map((peer) => [peer.id, peer]))
@@ -566,6 +637,16 @@ export default function AppLayout() {
           event: '*',
           schema: 'public',
           table: 'conversation_participants',
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        scheduleShellRefresh,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'saved_items',
           filter: `user_id=eq.${currentUserId}`,
         },
         scheduleShellRefresh,
@@ -856,6 +937,14 @@ export default function AppLayout() {
                     >
                       <span className="nav-pill-dot" />
                       <span className="truncate">{item.label}</span>
+                      {item.to === '/saved' && item.count && item.count > 0 ? (
+                        <span className="ml-auto text-xs font-semibold text-[var(--text-secondary)]">
+                          ({Math.min(item.count, 999)})
+                        </span>
+                      ) : null}
+                      {item.to === '/chats' && item.count && item.count > 0 ? (
+                        <span className="nav-badge">{Math.min(item.count, 99)}</span>
+                      ) : null}
                     </NavLink>
                   ))}
                 </nav>
@@ -1014,21 +1103,34 @@ export default function AppLayout() {
                     {t({ en: 'View all', el: 'Δες ολους' })}
                   </Link>
                 </div>
-                <div className="mt-3 rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2">
-                  <p className="text-[11px] text-[var(--text-secondary)]">
-                    {t({
-                      en: 'Advanced filters are available on the Students page.',
-                      el: 'Τα αναλυτικά φίλτρα είναι διαθέσιμα στη σελίδα Φοιτητές.',
-                    })}
-                  </p>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {([
+                    { key: 'recommended' as const, label: t({ en: 'For you', el: 'Για σένα' }) },
+                    { key: 'university' as const, label: t({ en: 'Same city', el: 'Ίδια πόλη' }) },
+                    { key: 'department' as const, label: t({ en: 'Same dept', el: 'Ίδιο τμήμα' }) },
+                  ]).map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => setSuggestionFilter(chip.key)}
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                        suggestionFilter === chip.key
+                          ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-950'
+                          : 'border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
                 </div>
 
-                {followSuggestions.length === 0 ? (
+                {filteredSuggestions.length === 0 ? (
                   <div className="mt-2 space-y-2">
                     <p className="text-xs text-[var(--text-secondary)]">
                       {t({
-                        en: 'No suggestions yet.',
-                        el: 'Δεν υπαρχουν προτασεις ακομα.',
+                        en: 'No suggestions for this filter.',
+                        el: 'Δεν υπάρχουν προτάσεις για αυτό το φίλτρο.',
                       })}
                     </p>
                     <Link
@@ -1040,7 +1142,7 @@ export default function AppLayout() {
                   </div>
                 ) : (
                   <ul className="mt-3 space-y-2">
-                    {followSuggestions.map((suggestion) => {
+                    {filteredSuggestions.map((suggestion) => {
                       const suggestionName =
                         suggestion.display_name ??
                         t({ en: 'Student', el: 'Φοιτητης' })
@@ -1179,10 +1281,15 @@ export default function AppLayout() {
           <NavLink
             to="/chats"
             className={({ isActive }) =>
-              `text-xs font-semibold ${isActive ? 'text-cyan-200' : 'text-[var(--text-secondary)]'}`
+              `relative text-xs font-semibold ${isActive ? 'text-cyan-200' : 'text-[var(--text-secondary)]'}`
             }
           >
             {t({ en: 'Messages', el: 'Μηνυματα' })}
+            {unreadMessagesCount > 0 ? (
+              <span className="notification-bubble animate-[pulse-soft_2s_ease-in-out_infinite]">
+                {Math.min(unreadMessagesCount, 9)}
+              </span>
+            ) : null}
           </NavLink>
           <button
             type="button"

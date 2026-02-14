@@ -470,7 +470,9 @@ export default function Marketplace() {
       : 'Good'
 
     if (payload.type === 'sell') {
-      const { error } = await supabase.from('listings').insert({
+      const insertRes = await supabase
+        .from('listings')
+        .insert({
         seller_id: currentUserId,
         title: payload.title,
         description: payload.description,
@@ -481,14 +483,42 @@ export default function Marketplace() {
         price: payload.price ?? 'Contact for price',
         location: payload.universityName || currentUniversityName,
       })
-      if (error) {
-        const details = error.message ? ` (${error.message})` : ''
+        .select('id')
+        .single()
+
+      if (insertRes.error || !insertRes.data?.id) {
+        const details = insertRes.error?.message ? ` (${insertRes.error.message})` : ''
         setErrorMessage({
           en: `Unable to create listing.${details}`,
           el: `Δεν ήταν δυνατή η δημιουργία αγγελίας.${details}`,
         })
         setIsSubmitting(false)
         return
+      }
+
+      if (payload.images && payload.images.length > 0) {
+        const uploadedUrls: string[] = []
+        for (let i = 0; i < payload.images.length; i += 1) {
+          const file = payload.images[i]
+          const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+          const path = `${currentUserId}/${insertRes.data.id}/${Date.now()}-${i}.${extension}`
+          const uploadRes = await supabase.storage
+            .from('listing-images')
+            .upload(path, file, { upsert: false, contentType: file.type })
+          if (uploadRes.error) continue
+          const publicUrl = supabase.storage.from('listing-images').getPublicUrl(path).data.publicUrl
+          uploadedUrls.push(publicUrl)
+        }
+
+        if (uploadedUrls.length > 0) {
+          await supabase
+            .from('listings')
+            .update({
+              image_url: uploadedUrls[0],
+              image_urls: uploadedUrls,
+            })
+            .eq('id', insertRes.data.id)
+        }
       }
     } else {
       const { error } = await supabase.from('wanted_listings').insert({

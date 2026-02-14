@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -34,6 +34,8 @@ export default function MarketplaceCreate() {
   const [conditionRating, setConditionRating] = useState<number | null>(null)
   const [locationId, setLocationId] = useState('')
   const [description, setDescription] = useState('')
+  const [selectedImages, setSelectedImages] = useState<File[]>([])
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = useState(true)
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -44,6 +46,27 @@ export default function MarketplaceCreate() {
   const [isPreStudent, setIsPreStudent] = useState(false)
   const [isCheckingAccess, setIsCheckingAccess] = useState(true)
   const navigate = useNavigate()
+
+  const handleImagesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (files.length === 0) return
+
+    const valid = files.filter((file) => file.type.startsWith('image/'))
+    if (valid.length === 0) return
+
+    const limited = valid.slice(0, 6)
+    previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    setSelectedImages(limited)
+    setPreviewUrls(limited.map((file) => URL.createObjectURL(file)))
+  }
+
+  useEffect(
+    () => () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    },
+    [previewUrls],
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -188,12 +211,43 @@ export default function MarketplaceCreate() {
       listingPayload.condition_rating = conditionRating
     }
 
-    const { error } = await supabase.from('listings').insert(listingPayload)
+    const insertRes = await supabase
+      .from('listings')
+      .insert(listingPayload)
+      .select('id')
+      .single()
 
-    if (error) {
+    if (insertRes.error || !insertRes.data?.id) {
       setShowLocked(true)
       setIsSubmitting(false)
       return
+    }
+
+    if (selectedImages.length > 0) {
+      const listingId = insertRes.data.id
+      const uploadedUrls: string[] = []
+
+      for (let i = 0; i < selectedImages.length; i += 1) {
+        const file = selectedImages[i]
+        const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+        const path = `${userData.user.id}/${listingId}/${Date.now()}-${i}.${extension}`
+        const uploadRes = await supabase.storage
+          .from('listing-images')
+          .upload(path, file, { upsert: false, contentType: file.type })
+        if (uploadRes.error) continue
+        const publicUrl = supabase.storage.from('listing-images').getPublicUrl(path).data.publicUrl
+        uploadedUrls.push(publicUrl)
+      }
+
+      if (uploadedUrls.length > 0) {
+        await supabase
+          .from('listings')
+          .update({
+            image_url: uploadedUrls[0],
+            image_urls: uploadedUrls,
+          })
+          .eq('id', listingId)
+      }
     }
 
     setIsSubmitting(false)
@@ -346,6 +400,24 @@ export default function MarketplaceCreate() {
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Περιέγραψε σύντομα το αντικείμενο."
           />
+        </label>
+
+        <label className="block space-y-1 text-sm font-medium">
+          Φωτογραφίες (προαιρετικά)
+          <input
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImagesChange}
+          />
+          {previewUrls.length > 0 ? (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {previewUrls.map((url) => (
+                <img key={url} src={url} alt="preview" className="h-20 w-full rounded-lg object-cover" />
+              ))}
+            </div>
+          ) : null}
         </label>
         <button
           className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"

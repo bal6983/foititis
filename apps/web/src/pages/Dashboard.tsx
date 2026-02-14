@@ -139,6 +139,8 @@ export default function Dashboard() {
   const [commentsByPost, setCommentsByPost] = useState<Record<string, FeedCommentView[]>>({})
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
+  const [burstPostId, setBurstPostId] = useState<string | null>(null)
+  const [missedPostCount, setMissedPostCount] = useState(0)
 
   const loadFeed = useCallback(async () => {
     setIsLoading(true)
@@ -459,6 +461,18 @@ export default function Dashboard() {
       }
     })
 
+    const lastVisitKey = 'foititis_last_feed_visit'
+    try {
+      const lastVisit = localStorage.getItem(lastVisitKey)
+      if (lastVisit) {
+        const missed = postRows.filter((p) => p.created_at > lastVisit).length
+        setMissedPostCount(missed)
+      }
+      localStorage.setItem(lastVisitKey, new Date().toISOString())
+    } catch {
+      // ignore storage errors
+    }
+
     const commentRows = (commentsResponse.data ?? []) as FeedCommentRow[]
     const commentAuthorIds = Array.from(new Set(commentRows.map((comment) => comment.author_id)))
 
@@ -567,6 +581,9 @@ export default function Dashboard() {
     )
 
     if (nextHasReacted) {
+      setBurstPostId(postId)
+      setTimeout(() => setBurstPostId(null), 450)
+
       const { error } = await supabase.from('feed_reactions').insert({
         post_id: postId,
         user_id: currentUserId,
@@ -806,17 +823,34 @@ export default function Dashboard() {
             })}
           </p>
         ) : null}
+
+        {missedPostCount > 0 ? (
+          <div className="fomo-ribbon">
+            {t({
+              en: `${missedPostCount} new posts since you were away`,
+              el: `${missedPostCount} νέες δημοσιεύσεις από τότε που έφυγες`,
+            })}
+          </div>
+        ) : null}
       </header>
 
       {storyHighlights.length > 0 ? (
         <section className="social-card p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-              {t({ en: 'Campus pulse', el: 'Pulse του campus' })}
-            </h2>
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">
-              {t({ en: 'Live now', el: 'Live τωρα' })}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="pulse-live-dot" />
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                {t({ en: 'Campus pulse', el: 'Pulse του campus' })}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                {storyHighlights.length} {t({ en: 'active today', el: 'ενεργοί σήμερα' })}
+              </span>
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t({ en: 'Today', el: 'Σήμερα' })}
+              </span>
+            </div>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {storyHighlights.map((story) => (
@@ -859,11 +893,12 @@ export default function Dashboard() {
                 : post.actionHref.includes('view=want')
                   ? 'from-pink-400 via-fuchsia-400 to-violet-400'
                   : 'from-sky-400 via-indigo-400 to-cyan-300'
+            const isFresh = Date.now() - new Date(post.createdAt).getTime() < 30 * 60 * 1000
 
             return (
               <article
                 key={post.id}
-                className="feed-card social-card overflow-hidden p-0"
+                className={`feed-card social-card overflow-hidden p-0${isFresh ? ' new-content-shimmer' : ''}`}
                 style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
               >
                 <div className={`h-1.5 bg-gradient-to-r ${accentBarClasses}`} />
@@ -891,9 +926,16 @@ export default function Dashboard() {
                         ) : null}
                       </div>
 
-                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {compactTimeAgo(post.createdAt)}
-                      </p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {compactTimeAgo(post.createdAt)}
+                        </p>
+                        {isFresh ? (
+                          <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300">
+                            {t({ en: 'new', el: 'νέο' })}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
@@ -934,7 +976,7 @@ export default function Dashboard() {
                       post.hasReacted
                         ? 'bg-blue-500/20 text-blue-200'
                         : 'border border-[var(--border-primary)] text-[var(--text-secondary)]'
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                    }${burstPostId === post.id ? ' reaction-burst' : ''} disabled:cursor-not-allowed disabled:opacity-60`}
                   >
                     {post.hasReacted
                       ? t({ en: `Liked (${post.reactionsCount})`, el: `Liked (${post.reactionsCount})` })

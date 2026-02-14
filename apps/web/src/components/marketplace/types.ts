@@ -25,4 +25,5 @@ export type CreateMarketplaceItemInput = {
   conditionRating: number | null
   price: string | null
   universityName: string
+  images?: File[]
 }

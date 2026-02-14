@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient'
 type PublicProfileRecord = {
   id: string
   display_name: string | null
+  bio: string | null
   school_id: string | null
   university_id: string | null
   city_id: string | null
@@ -107,7 +108,7 @@ export default function PublicProfile() {
       const profileWithSocialRes = await supabase
         .from('public_profiles')
         .select(
-          'id, display_name, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student, followers_count, following_count',
+          'id, display_name, bio, school_id, university_id, city_id, study_year, is_verified_student, is_pre_student, followers_count, following_count',
         )
         .eq('id', id)
         .maybeSingle()
@@ -129,6 +130,7 @@ export default function PublicProfile() {
               ...(profileLegacyRes.data as Omit<PublicProfileRecord, 'followers_count' | 'following_count'>),
               followers_count: 0,
               following_count: 0,
+              bio: null,
             } as PublicProfileRecord)
           : null
         profileError = profileLegacyRes.error
@@ -281,20 +283,28 @@ export default function PublicProfile() {
     setConversationLoading(true)
     setConversationError('')
 
-    const { data: rpcData, error } = await supabase.rpc('get_or_create_conversation', {
+    let conversationId = ''
+    const primaryRpc = await supabase.rpc('get_or_create_conversation', {
       user_a: currentUserId,
       user_b: profile.id,
     })
 
-    if (error) {
-      setConversationError(t({ en: 'Unable to start conversation.', el: 'Αδυναμια εκκινησης συνομιλιας.' }))
-      setConversationLoading(false)
-      return
+    if (primaryRpc.error) {
+      const fallbackRpc = await supabase.rpc('start_conversation', {
+        other_user_id: profile.id,
+      })
+      if (fallbackRpc.error) {
+        setConversationError(t({ en: 'Unable to start conversation.', el: 'Αδυναμία εκκίνησης συνομιλίας.' }))
+        setConversationLoading(false)
+        return
+      }
+      conversationId = getConversationIdFromRpc(fallbackRpc.data)
+    } else {
+      conversationId = getConversationIdFromRpc(primaryRpc.data)
     }
 
-    const conversationId = getConversationIdFromRpc(rpcData)
     if (!conversationId) {
-      setConversationError(t({ en: 'Conversation not found.', el: 'Η συνομιλια δεν βρεθηκε.' }))
+      setConversationError(t({ en: 'Conversation not found.', el: 'Η συνομιλία δεν βρέθηκε.' }))
       setConversationLoading(false)
       return
     }
@@ -342,6 +352,9 @@ export default function PublicProfile() {
                   ? t({ en: 'Verified student', el: 'Επαληθευμενος φοιτητης' })
                   : t({ en: 'Pre-student', el: 'Προ-φοιτητης' })}
               </p>
+              {profile.bio ? (
+                <p className="mt-2 max-w-xl text-sm text-[var(--text-secondary)]">{profile.bio}</p>
+              ) : null}
             </div>
           </div>
 

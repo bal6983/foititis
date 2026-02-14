@@ -54,7 +54,7 @@ export default function ProtectedRoute() {
         session.user.user_metadata?.is_pre_student === true ||
         session.user.user_metadata?.student_type === 'pre-student'
 
-      const { data: profile, error: profileError } = await supabase
+      let profileRes = await supabase
         .from('profiles')
         .select(
           'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
@@ -62,10 +62,23 @@ export default function ProtectedRoute() {
         .eq('id', session.user.id)
         .maybeSingle()
 
+      if (profileRes.error) {
+        const joined = `${profileRes.error.message ?? ''} ${profileRes.error.details ?? ''}`.toLowerCase()
+        if (joined.includes('does not exist') || joined.includes('schema cache')) {
+          profileRes = (await supabase
+            .from('profiles')
+            .select(
+              'display_name, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
+            )
+            .eq('id', session.user.id)
+            .maybeSingle()) as typeof profileRes
+        }
+      }
+
       if (!isMounted) return
 
-      if (profileError) {
-        const details = profileError?.message ? ` (${profileError.message})` : ''
+      if (profileRes.error) {
+        const details = profileRes.error?.message ? ` (${profileRes.error.message})` : ''
         setGuardState({
           status: 'error',
           message: {
@@ -76,7 +89,14 @@ export default function ProtectedRoute() {
         return
       }
 
-      let resolvedProfile = profile
+      let resolvedProfile = profileRes.data
+        ? ({
+            ...profileRes.data,
+            onboarding_completed:
+              (profileRes.data as { onboarding_completed?: boolean | null })
+                .onboarding_completed ?? true,
+          } as (typeof profileRes.data & { onboarding_completed: boolean }))
+        : null
 
       if (!resolvedProfile) {
         const { data: createdProfile, error: createError } = await supabase

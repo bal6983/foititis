@@ -8,6 +8,7 @@ type ProfileRow = {
   id: string
   display_name: string | null
   avatar_url: string | null
+  bio: string | null
   university_id: string | null
   school_id: string | null
   is_verified_student: boolean | null
@@ -15,6 +16,20 @@ type ProfileRow = {
   followers_count: number | null
   following_count: number | null
 }
+
+type FollowPerson = {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
+}
+
+type SimpleItem = {
+  id: string
+  title: string
+  created_at: string
+}
+
+type ProfilePanelKey = 'followers' | 'following' | 'listings' | 'wanted' | null
 
 type BadgeItem = {
   id: string
@@ -77,6 +92,7 @@ export default function Profile() {
   const [userId, setUserId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [avatarUploadMessage, setAvatarUploadMessage] = useState('')
@@ -101,6 +117,12 @@ export default function Profile() {
   const [verificationMessage, setVerificationMessage] = useState('')
 
   const [selectedBadge, setSelectedBadge] = useState<BadgeItem | null>(null)
+  const [profilePanel, setProfilePanel] = useState<ProfilePanelKey>(null)
+  const [isPanelLoading, setIsPanelLoading] = useState(false)
+  const [panelError, setPanelError] = useState('')
+  const [panelPeople, setPanelPeople] = useState<FollowPerson[]>([])
+  const [panelListings, setPanelListings] = useState<SimpleItem[]>([])
+  const [panelWanted, setPanelWanted] = useState<SimpleItem[]>([])
 
   useEffect(() => {
     let isMounted = true
@@ -123,7 +145,7 @@ export default function Profile() {
       const profileWithSocialRes = await supabase
         .from('profiles')
         .select(
-          'id, display_name, avatar_url, university_id, school_id, is_verified_student, is_pre_student, followers_count, following_count',
+          'id, display_name, avatar_url, bio, university_id, school_id, is_verified_student, is_pre_student, followers_count, following_count',
         )
         .eq('id', currentUserId)
         .maybeSingle()
@@ -145,6 +167,7 @@ export default function Profile() {
               ...(profileLegacyRes.data as Omit<ProfileRow, 'followers_count' | 'following_count'>),
               followers_count: 0,
               following_count: 0,
+              bio: null,
             } as ProfileRow)
           : null
         profileError = profileLegacyRes.error
@@ -167,6 +190,7 @@ export default function Profile() {
       setEmail(currentEmail)
       setDisplayName(profile.display_name || currentEmail)
       setAvatarUrl(profile.avatar_url ?? '')
+      setBio(profile.bio ?? '')
       setAvatarLoadError(false)
       setIsVerifiedStudent(verified)
       setIsPreStudent(preStudent)
@@ -360,6 +384,93 @@ export default function Profile() {
     setIsVerificationLoading(false)
   }
 
+  const loadPanelData = async (key: Exclude<ProfilePanelKey, null>) => {
+    if (!userId) return
+
+    setProfilePanel(key)
+    setIsPanelLoading(true)
+    setPanelError('')
+    setPanelPeople([])
+    setPanelListings([])
+    setPanelWanted([])
+
+    if (key === 'followers' || key === 'following') {
+      const field = key === 'followers' ? 'follower_id' : 'followed_id'
+      const whereField = key === 'followers' ? 'followed_id' : 'follower_id'
+
+      const followsRes = await supabase
+        .from('follows')
+        .select(field)
+        .eq(whereField, userId)
+        .limit(120)
+
+      if (followsRes.error) {
+        setPanelError(t({ en: 'Unable to load list.', el: 'Αδυναμία φόρτωσης λίστας.' }))
+        setIsPanelLoading(false)
+        return
+      }
+
+      const ids = (followsRes.data ?? [])
+        .map((row) => (row as Record<string, string>)[field])
+        .filter(Boolean)
+
+      if (ids.length === 0) {
+        setIsPanelLoading(false)
+        return
+      }
+
+      const profilesRes = await supabase
+        .from('public_profiles')
+        .select('id, display_name, avatar_url')
+        .in('id', ids)
+
+      if (profilesRes.error) {
+        setPanelError(t({ en: 'Unable to load profiles.', el: 'Αδυναμία φόρτωσης προφίλ.' }))
+        setIsPanelLoading(false)
+        return
+      }
+
+      setPanelPeople((profilesRes.data ?? []) as FollowPerson[])
+      setIsPanelLoading(false)
+      return
+    }
+
+    if (key === 'listings') {
+      const listingsRes = await supabase
+        .from('listings')
+        .select('id, title, created_at')
+        .eq('seller_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(120)
+
+      if (listingsRes.error) {
+        setPanelError(t({ en: 'Unable to load listings.', el: 'Αδυναμία φόρτωσης αγγελιών.' }))
+        setIsPanelLoading(false)
+        return
+      }
+
+      setPanelListings((listingsRes.data ?? []) as SimpleItem[])
+      setIsPanelLoading(false)
+      return
+    }
+
+    const wantedRes = await supabase
+      .from('wanted_listings')
+      .select('id, title, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(120)
+
+    if (wantedRes.error) {
+      setPanelError(t({ en: 'Unable to load requests.', el: 'Αδυναμία φόρτωσης ζητήσεων.' }))
+      setIsPanelLoading(false)
+      return
+    }
+
+    setPanelWanted((wantedRes.data ?? []) as SimpleItem[])
+    setIsPanelLoading(false)
+  }
+
   if (isLoading) {
     return (
       <section className="space-y-2">
@@ -395,6 +506,9 @@ export default function Profile() {
                 {[universityName, schoolName].filter(Boolean).join(' / ') ||
                   t({ en: 'Campus member', el: 'Μελος campus' })}
               </p>
+              {bio ? (
+                <p className="mt-2 max-w-xl text-sm text-[var(--text-secondary)]">{bio}</p>
+              ) : null}
             </div>
           </div>
 
@@ -436,10 +550,38 @@ export default function Profile() {
         {avatarUploadMessage ? <p className="mt-3 text-xs text-[var(--text-secondary)]">{avatarUploadMessage}</p> : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <div className="rounded-xl bg-[var(--surface-soft)] px-3 py-2"><p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Followers', el: 'Ακολουθοι' })}</p><p className="text-lg font-semibold text-[var(--text-primary)]">{followersCount}</p></div>
-          <div className="rounded-xl bg-[var(--surface-soft)] px-3 py-2"><p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Following', el: 'Ακολουθεις' })}</p><p className="text-lg font-semibold text-[var(--text-primary)]">{followingCount}</p></div>
-          <div className="rounded-xl bg-[var(--surface-soft)] px-3 py-2"><p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Listings', el: 'Αγγελιες' })}</p><p className="text-lg font-semibold text-[var(--text-primary)]">{listingsCount}</p></div>
-          <div className="rounded-xl bg-[var(--surface-soft)] px-3 py-2"><p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Requests', el: 'Ζητησεις' })}</p><p className="text-lg font-semibold text-[var(--text-primary)]">{wantedCount}</p></div>
+          <button
+            type="button"
+            onClick={() => void loadPanelData('followers')}
+            className="rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-left"
+          >
+            <p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Followers', el: 'Ακόλουθοι' })}</p>
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{followersCount}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadPanelData('following')}
+            className="rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-left"
+          >
+            <p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Following', el: 'Ακολουθείς' })}</p>
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{followingCount}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadPanelData('listings')}
+            className="rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-left"
+          >
+            <p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Listings', el: 'Αγγελίες' })}</p>
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{listingsCount}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadPanelData('wanted')}
+            className="rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-left"
+          >
+            <p className="text-[11px] text-[var(--text-secondary)]">{t({ en: 'Requests', el: 'Ζητήσεις' })}</p>
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{wantedCount}</p>
+          </button>
         </div>
       </header>
 
@@ -509,6 +651,93 @@ export default function Profile() {
           {verificationMessage ? <p className="mt-2 text-xs text-[var(--text-secondary)]">{verificationMessage}</p> : null}
           {isPreStudent ? <p className="mt-2 text-xs text-amber-100">{t({ en: 'Limited badge progression is active until verification.', el: 'Η περιορισμενη προοδος badges ειναι ενεργη μεχρι το verification.' })}</p> : null}
         </section>
+      ) : null}
+
+      {profilePanel ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4" onClick={() => setProfilePanel(null)}>
+          <div
+            className="w-full max-w-lg rounded-2xl border border-[var(--border-primary)] bg-[var(--surface-elevated)] p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-[var(--text-primary)]">
+                {profilePanel === 'followers'
+                  ? t({ en: 'Followers', el: 'Ακόλουθοι' })
+                  : profilePanel === 'following'
+                    ? t({ en: 'Following', el: 'Ακολουθείς' })
+                    : profilePanel === 'listings'
+                      ? t({ en: 'My listings', el: 'Οι αγγελίες μου' })
+                      : t({ en: 'My requests', el: 'Οι ζητήσεις μου' })}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setProfilePanel(null)}
+                className="rounded-xl border border-[var(--border-primary)] px-2 py-1 text-xs text-[var(--text-secondary)]"
+              >
+                {t({ en: 'Close', el: 'Κλείσιμο' })}
+              </button>
+            </div>
+
+            {isPanelLoading ? (
+              <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'Loading...', el: 'Φόρτωση...' })}</p>
+            ) : null}
+
+            {panelError ? (
+              <p className="rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{panelError}</p>
+            ) : null}
+
+            {!isPanelLoading && !panelError && (profilePanel === 'followers' || profilePanel === 'following') ? (
+              panelPeople.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'No users found.', el: 'Δεν βρέθηκαν χρήστες.' })}</p>
+              ) : (
+                <ul className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                  {panelPeople.map((person) => (
+                    <li key={person.id}>
+                      <Link to={`/profile/${person.id}`} className="flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                        <Avatar name={person.display_name || 'User'} url={person.avatar_url} size="sm" />
+                        <span className="text-sm text-[var(--text-primary)]">{person.display_name || t({ en: 'Student', el: 'Φοιτητής' })}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+
+            {!isPanelLoading && !panelError && profilePanel === 'listings' ? (
+              panelListings.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'No listings yet.', el: 'Δεν υπάρχουν αγγελίες ακόμα.' })}</p>
+              ) : (
+                <ul className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                  {panelListings.map((item) => (
+                    <li key={item.id}>
+                      <Link to={`/marketplace/${item.id}`} className="block rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{item.title}</p>
+                        <p className="text-xs text-[var(--text-secondary)]">{new Date(item.created_at).toLocaleDateString('el-GR')}</p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+
+            {!isPanelLoading && !panelError && profilePanel === 'wanted' ? (
+              panelWanted.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'No requests yet.', el: 'Δεν υπάρχουν ζητήσεις ακόμα.' })}</p>
+              ) : (
+                <ul className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                  {panelWanted.map((item) => (
+                    <li key={item.id}>
+                      <Link to={`/wanted/${item.id}`} className="block rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{item.title}</p>
+                        <p className="text-xs text-[var(--text-secondary)]">{new Date(item.created_at).toLocaleDateString('el-GR')}</p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {selectedBadge ? (
