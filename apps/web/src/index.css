@@ -63,6 +63,29 @@
       border-color 220ms ease;
   }
 
+  /* Global select/dropdown readability fix (dark + light mode) */
+  select {
+    color: var(--text-primary);
+    background-color: var(--surface-soft);
+    color-scheme: dark;
+  }
+
+  html:not(.dark) select {
+    color-scheme: light;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #0f1a32;
+    color: #ecf1ff;
+  }
+
+  html:not(.dark) select option,
+  html:not(.dark) select optgroup {
+    background-color: #ffffff;
+    color: #101a31;
+  }
+
   body::before {
     content: '';
     position: fixed;
@@ -180,14 +203,70 @@
     min-width: 18px;
     height: 18px;
     border-radius: 9999px;
-    background: var(--danger);
-    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 84%, white 16%), color-mix(in oklab, var(--accent-secondary) 72%, white 28%));
+    color: #041327;
     font-size: 10px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: notification-pop 300ms ease, notification-float 2200ms ease-in-out infinite;
+    box-shadow: 0 6px 18px rgba(34, 211, 238, 0.35);
+    animation: notification-pop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
+  }
+
+  .notification-bubble--alert {
+    animation:
+      notification-pop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both,
+      notification-tease 2600ms ease-in-out infinite;
+  }
+
+  /* Burst ring that expands on bell click */
+  .notification-burst-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    border: 2px solid color-mix(in oklab, var(--accent-secondary) 72%, white 28%);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent-secondary) 18%, transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .notification-burst-ring.is-bursting {
+    animation: burst-ring 500ms ease-out forwards;
+  }
+
+  /* Dropdown entrance */
+  .notification-dropdown {
+    animation: dropdown-appear 220ms ease-out;
+    transform-origin: top right;
+    isolation: isolate;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  .notification-backdrop {
+    background: color-mix(in oklab, var(--bg-primary) 56%, transparent);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    animation: fade-in 160ms ease-out;
+  }
+
+  /* Nav badge (inline counter) */
+  .nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: auto;
+    padding: 0 5px;
+    animation: badge-in 300ms ease;
   }
 }
 
@@ -198,9 +277,11 @@
   100% { transform: scale(1); }
 }
 
-@keyframes notification-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+@keyframes notification-tease {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  36% { transform: translate3d(0, -1.5px, 0) scale(1.02); }
+  52% { transform: translate3d(0, 0, 0) scale(0.99); }
+  72% { transform: translate3d(0, -1px, 0) scale(1.01); }
 }
 
 @keyframes fade-in {
@@ -226,4 +307,20 @@
 @keyframes ambient-drift {
   0% { transform: translate3d(0, 0, 0); }
   100% { transform: translate3d(1.5%, -1.5%, 0); }
+}
+
+@keyframes burst-ring {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes dropdown-appear {
+  0% { opacity: 0; transform: scale(0.92) translateY(-6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes badge-in {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
 }

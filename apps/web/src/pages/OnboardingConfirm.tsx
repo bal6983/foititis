@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import {
+  fetchDepartmentsForSchool,
+  fetchSchoolsForUniversity,
+  fetchUniversitiesForCity,
+} from '../lib/universityLookup'
 
 type OnboardingConfirmStorage = {
   city_id: string | null
@@ -9,6 +14,8 @@ type OnboardingConfirmStorage = {
   university_name: string
   school_id: string | null
   school_name: string
+  department_id?: string | null
+  department_name?: string
 }
 
 type OptionItem = {
@@ -40,16 +47,20 @@ export default function OnboardingConfirm() {
   const [cityId, setCityId] = useState<string | null>(null)
   const [universityId, setUniversityId] = useState<string | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [departmentId, setDepartmentId] = useState<string | null>(null)
   const [cityName, setCityName] = useState('')
   const [universityName, setUniversityName] = useState('')
   const [schoolName, setSchoolName] = useState('')
+  const [departmentName, setDepartmentName] = useState('')
   const [studyYear, setStudyYear] = useState('')
   const [cities, setCities] = useState<OptionItem[]>([])
   const [universities, setUniversities] = useState<OptionItem[]>([])
   const [schools, setSchools] = useState<OptionItem[]>([])
+  const [departments, setDepartments] = useState<OptionItem[]>([])
   const [isLoadingCities, setIsLoadingCities] = useState(false)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
   const [isLoadingSchools, setIsLoadingSchools] = useState(false)
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -57,11 +68,12 @@ export default function OnboardingConfirm() {
   const canSubmit = useMemo(() => {
     if (isSubmitting) return false
     if (fullName.trim() === '' || displayName.trim() === '') return false
-    if (!cityId || !universityId || !schoolId) return false
+    if (!cityId || !universityId || !schoolId || !departmentId) return false
     if (isPreStudent) return true
     return studyYear.trim() !== ''
   }, [
     cityId,
+    departmentId,
     displayName,
     fullName,
     isPreStudent,
@@ -95,7 +107,7 @@ export default function OnboardingConfirm() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'full_name, display_name, city_id, university_id, school_id, study_year, is_pre_student, is_verified_student',
+          'full_name, display_name, city_id, university_id, school_id, department_id, study_year, is_pre_student, is_verified_student',
         )
         .eq('id', userData.user.id)
         .maybeSingle()
@@ -114,12 +126,15 @@ export default function OnboardingConfirm() {
         normalizeId(stored?.university_id) ?? profile?.university_id ?? null
       const resolvedSchoolId =
         normalizeId(stored?.school_id) ?? profile?.school_id ?? null
+      const resolvedDepartmentId =
+        normalizeId(stored?.department_id) ?? profile?.department_id ?? null
       const resolvedIsPreStudent =
         Boolean(profile?.is_pre_student) && !Boolean(profile?.is_verified_student)
 
       setCityId(resolvedCityId)
       setUniversityId(resolvedUniversityId)
       setSchoolId(resolvedSchoolId)
+      setDepartmentId(resolvedDepartmentId)
       setStudyYear(profile?.study_year ? String(profile.study_year) : '')
       setFullName(profile?.full_name ?? '')
       setDisplayName(profile?.display_name ?? '')
@@ -157,6 +172,17 @@ export default function OnboardingConfirm() {
             .eq('id', resolvedSchoolId)
             .maybeSingle()
           if (isMounted) setSchoolName(schoolData?.name ?? '')
+        }
+
+        if (stored?.department_name) {
+          setDepartmentName(stored.department_name)
+        } else if (resolvedDepartmentId) {
+          const { data: departmentData } = await supabase
+            .from('departments')
+            .select('name')
+            .eq('id', resolvedDepartmentId)
+            .maybeSingle()
+          if (isMounted) setDepartmentName(departmentData?.name ?? '')
         }
       }
 
@@ -213,11 +239,7 @@ export default function OnboardingConfirm() {
       }
 
       setIsLoadingUniversities(true)
-      const { data, error } = await supabase
-        .from('universities')
-        .select('id, name')
-        .eq('city_id', cityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchUniversitiesForCity(cityId)
 
       if (!isMounted) return
 
@@ -250,11 +272,9 @@ export default function OnboardingConfirm() {
       }
 
       setIsLoadingSchools(true)
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('university_id', universityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchSchoolsForUniversity(universityId, {
+        cityId: cityId ?? null,
+      })
 
       if (!isMounted) return
 
@@ -274,7 +294,42 @@ export default function OnboardingConfirm() {
     return () => {
       isMounted = false
     }
-  }, [isPreStudent, universityId])
+  }, [cityId, isPreStudent, universityId])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadDepartments = async () => {
+      if (!isPreStudent) return
+      if (!schoolId) {
+        setDepartments([])
+        return
+      }
+
+      setIsLoadingDepartments(true)
+      const { data, error } = await fetchDepartmentsForSchool(schoolId, {
+        cityId: cityId ?? null,
+      })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setErrorMessage(`Αδυναμία φόρτωσης τμημάτων.${details}`)
+        setIsLoadingDepartments(false)
+        return
+      }
+
+      setDepartments((data ?? []) as OptionItem[])
+      setIsLoadingDepartments(false)
+    }
+
+    loadDepartments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cityId, isPreStudent, schoolId])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -293,7 +348,7 @@ export default function OnboardingConfirm() {
       return
     }
 
-    if (!cityId || !universityId || !schoolId) {
+    if (!cityId || !universityId || !schoolId || !departmentId) {
       setErrorMessage('Συμπλήρωσε πόλη, πανεπιστήμιο και σχολή.')
       return
     }
@@ -311,6 +366,7 @@ export default function OnboardingConfirm() {
       city_id: string
       university_id: string
       school_id: string
+      department_id: string
       study_year?: number
     } = {
       full_name: trimmedFullName,
@@ -318,6 +374,7 @@ export default function OnboardingConfirm() {
       city_id: cityId,
       university_id: universityId,
       school_id: schoolId,
+      department_id: departmentId,
     }
 
     if (!isPreStudent) {
@@ -401,6 +458,7 @@ export default function OnboardingConfirm() {
                   setCityId(value)
                   setUniversityId(null)
                   setSchoolId(null)
+                  setDepartmentId(null)
                 }}
                 disabled={isLoadingCities}
                 required
@@ -423,6 +481,7 @@ export default function OnboardingConfirm() {
                   const value = event.target.value || null
                   setUniversityId(value)
                   setSchoolId(null)
+                  setDepartmentId(null)
                 }}
                 disabled={!cityId || isLoadingUniversities}
                 required
@@ -441,7 +500,10 @@ export default function OnboardingConfirm() {
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
                 value={schoolId ?? ''}
-                onChange={(event) => setSchoolId(event.target.value || null)}
+                onChange={(event) => {
+                  setSchoolId(event.target.value || null)
+                  setDepartmentId(null)
+                }}
                 disabled={!universityId || isLoadingSchools}
                 required
               >
@@ -449,6 +511,23 @@ export default function OnboardingConfirm() {
                 {schools.map((school) => (
                   <option key={school.id} value={school.id}>
                     {school.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm font-medium">
+              Τμήμα
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                value={departmentId ?? ''}
+                onChange={(event) => setDepartmentId(event.target.value || null)}
+                disabled={!schoolId || isLoadingDepartments}
+                required
+              >
+                <option value="">Επίλεξε τμήμα</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
                   </option>
                 ))}
               </select>
@@ -482,6 +561,16 @@ export default function OnboardingConfirm() {
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
                 type="text"
                 value={schoolName}
+                disabled
+              />
+            </label>
+
+            <label className="block space-y-1 text-sm font-medium">
+              Τμήμα
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                type="text"
+                value={departmentName}
                 disabled
               />
             </label>

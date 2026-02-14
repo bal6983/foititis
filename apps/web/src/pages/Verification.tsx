@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import {
+  fetchDepartmentsForSchool,
+  fetchSchoolsForUniversity,
+  fetchUniversitiesForCity,
+} from '../lib/universityLookup'
 
 type VerificationState = 'idle' | 'pending' | 'approved' | 'rejected'
 
@@ -16,13 +21,16 @@ export default function Verification() {
   const [cityId, setCityId] = useState<string | null>(null)
   const [universityId, setUniversityId] = useState<string | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [departmentId, setDepartmentId] = useState<string | null>(null)
   const [universityEmail, setUniversityEmail] = useState('')
   const [cities, setCities] = useState<OptionItem[]>([])
   const [universities, setUniversities] = useState<OptionItem[]>([])
   const [schools, setSchools] = useState<OptionItem[]>([])
+  const [departments, setDepartments] = useState<OptionItem[]>([])
   const [isLoadingCities, setIsLoadingCities] = useState(false)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
   const [isLoadingSchools, setIsLoadingSchools] = useState(false)
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -47,7 +55,7 @@ export default function Verification() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(
-          'is_verified_student, is_pre_student, verification_status, city_id, university_id, school_id, university_email',
+          'is_verified_student, is_pre_student, verification_status, city_id, university_id, school_id, department_id, university_email',
         )
         .eq('id', userData.user.id)
         .single()
@@ -75,6 +83,7 @@ export default function Verification() {
       setCityId(profile.city_id ?? null)
       setUniversityId(profile.university_id ?? null)
       setSchoolId(profile.school_id ?? null)
+      setDepartmentId(profile.department_id ?? null)
       setUniversityEmail(profile.university_email ?? '')
       setIsPreStudent(
         Boolean(profile.is_pre_student) && !Boolean(profile.is_verified_student),
@@ -142,11 +151,7 @@ export default function Verification() {
       }
 
       setIsLoadingUniversities(true)
-      const { data, error } = await supabase
-        .from('universities')
-        .select('id, name')
-        .eq('city_id', cityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchUniversitiesForCity(cityId)
 
       if (!isMounted) return
 
@@ -179,11 +184,9 @@ export default function Verification() {
       }
 
       setIsLoadingSchools(true)
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('university_id', universityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchSchoolsForUniversity(universityId, {
+        cityId: cityId ?? null,
+      })
 
       if (!isMounted) return
 
@@ -203,7 +206,42 @@ export default function Verification() {
     return () => {
       isMounted = false
     }
-  }, [isPreStudent, universityId])
+  }, [cityId, isPreStudent, universityId])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadDepartments = async () => {
+      if (!isPreStudent) return
+      if (!schoolId) {
+        setDepartments([])
+        return
+      }
+
+      setIsLoadingDepartments(true)
+      const { data, error } = await fetchDepartmentsForSchool(schoolId, {
+        cityId: cityId ?? null,
+      })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setErrorMessage(`Αδυναμία φόρτωσης τμημάτων.${details}`)
+        setIsLoadingDepartments(false)
+        return
+      }
+
+      setDepartments((data ?? []) as OptionItem[])
+      setIsLoadingDepartments(false)
+    }
+
+    loadDepartments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cityId, isPreStudent, schoolId])
 
   const shouldShowCta = status === 'idle' || status === 'rejected'
 
@@ -211,9 +249,10 @@ export default function Verification() {
     if (!shouldShowCta || isSubmitting) return false
     if (universityEmail.trim() === '') return false
     if (!isPreStudent) return true
-    return Boolean(cityId && universityId && schoolId)
+    return Boolean(cityId && universityId && schoolId && departmentId)
   }, [
     cityId,
+    departmentId,
     isPreStudent,
     isSubmitting,
     schoolId,
@@ -235,7 +274,7 @@ export default function Verification() {
       return
     }
 
-    if (isPreStudent && (!cityId || !universityId || !schoolId)) {
+    if (isPreStudent && (!cityId || !universityId || !schoolId || !departmentId)) {
       setErrorMessage(
         'Ως pre-student πρέπει να επιλέξεις τελική πόλη, πανεπιστήμιο και σχολή.',
       )
@@ -251,6 +290,7 @@ export default function Verification() {
           city_id: cityId,
           university_id: universityId,
           school_id: schoolId,
+          department_id: departmentId,
         })
         .eq('id', userId)
 
@@ -370,6 +410,7 @@ export default function Verification() {
                     setCityId(value)
                     setUniversityId(null)
                     setSchoolId(null)
+                    setDepartmentId(null)
                   }}
                   disabled={isLoadingCities}
                   required
@@ -392,6 +433,7 @@ export default function Verification() {
                     const value = event.target.value || null
                     setUniversityId(value)
                     setSchoolId(null)
+                    setDepartmentId(null)
                   }}
                   disabled={!cityId || isLoadingUniversities}
                   required
@@ -410,7 +452,10 @@ export default function Verification() {
                 <select
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
                   value={schoolId ?? ''}
-                  onChange={(event) => setSchoolId(event.target.value || null)}
+                  onChange={(event) => {
+                    setSchoolId(event.target.value || null)
+                    setDepartmentId(null)
+                  }}
                   disabled={!universityId || isLoadingSchools}
                   required
                 >
@@ -418,6 +463,23 @@ export default function Verification() {
                   {schools.map((school) => (
                     <option key={school.id} value={school.id}>
                       {school.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block space-y-1 text-sm font-medium">
+                Τμήμα
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                  value={departmentId ?? ''}
+                  onChange={(event) => setDepartmentId(event.target.value || null)}
+                  disabled={!schoolId || isLoadingDepartments}
+                  required
+                >
+                  <option value="">Επίλεξε τμήμα</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
                     </option>
                   ))}
                 </select>
@@ -458,4 +520,3 @@ export default function Verification() {
     </section>
   )
 }
-

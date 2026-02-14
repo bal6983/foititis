@@ -2,13 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Avatar } from '../components/ui/Avatar'
 import { useI18n } from '../lib/i18n'
+import {
+  recommendationScore,
+  sortByRecommendation,
+  type RecommendationContext,
+} from '../lib/peerRecommendations'
 import { supabase } from '../lib/supabaseClient'
+import {
+  fetchDepartmentsForSchool,
+  fetchSchoolsForUniversity,
+  fetchUniversitiesForCity,
+} from '../lib/universityLookup'
 
 type ViewMode = 'recommended' | 'all'
 
 type CurrentProfile = {
   id: string
+  city_id: string | null
   university_id: string | null
+  school_id: string | null
+  department_id: string | null
   study_year: number | null
   is_verified_student: boolean | null
   is_pre_student: boolean | null
@@ -18,7 +31,10 @@ type PeerProfileRow = {
   id: string
   display_name: string | null
   avatar_url: string | null
+  city_id: string | null
   university_id: string | null
+  school_id: string | null
+  department_id: string | null
   study_year: number | null
   is_verified_student: boolean | null
   is_pre_student: boolean | null
@@ -27,6 +43,11 @@ type PeerProfileRow = {
 }
 
 type UniversityRow = {
+  id: string
+  name: string
+}
+
+type LookupOption = {
   id: string
   name: string
 }
@@ -50,29 +71,52 @@ const hasMissingSchemaError = (error: PostgrestErrorLike | null | undefined, tok
 
 export default function Students() {
   const { t } = useI18n()
-  const [isLoading, setIsLoading] = useState(true)
+
+  const [isInitializing, setIsInitializing] = useState(true)
+  const [isLoadingPeers, setIsLoadingPeers] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('recommended')
+
   const [currentUserId, setCurrentUserId] = useState('')
+  const [currentCityId, setCurrentCityId] = useState<string | null>(null)
   const [currentUniversityId, setCurrentUniversityId] = useState<string | null>(null)
+  const [currentSchoolId, setCurrentSchoolId] = useState<string | null>(null)
+  const [currentDepartmentId, setCurrentDepartmentId] = useState<string | null>(null)
   const [currentStudyYear, setCurrentStudyYear] = useState<number | null>(null)
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
   const [isPreStudent, setIsPreStudent] = useState(false)
+
   const [supportsFollowSystem, setSupportsFollowSystem] = useState(true)
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set())
-  const [universitiesMap, setUniversitiesMap] = useState<Map<string, string>>(new Map())
-  const [peers, setPeers] = useState<PeerProfileRow[]>([])
 
-  const loadStudents = useCallback(async () => {
-    setIsLoading(true)
+  const [peers, setPeers] = useState<PeerProfileRow[]>([])
+  const [universitiesMap, setUniversitiesMap] = useState<Map<string, string>>(new Map())
+
+  const [filterCityId, setFilterCityId] = useState('')
+  const [filterUniversityId, setFilterUniversityId] = useState('')
+  const [filterSchoolId, setFilterSchoolId] = useState('')
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
+
+  const [cities, setCities] = useState<LookupOption[]>([])
+  const [universities, setUniversities] = useState<LookupOption[]>([])
+  const [schools, setSchools] = useState<LookupOption[]>([])
+  const [departments, setDepartments] = useState<LookupOption[]>([])
+
+  const loadInitialContext = useCallback(async () => {
+    setIsInitializing(true)
     setErrorMessage('')
 
     const { data: authData, error: authError } = await supabase.auth.getUser()
     if (authError || !authData.user) {
       const details = authError?.message ? ` (${authError.message})` : ''
-      setErrorMessage(t({ en: `Unable to load students${details}.`, el: `Αδυναμια φορτωσης φοιτητων${details}.` }))
-      setIsLoading(false)
+      setErrorMessage(
+        t({
+          en: `Unable to load students${details}.`,
+          el: `Δεν ήταν δυνατή η φόρτωση φοιτητών${details}.`,
+        }),
+      )
+      setIsInitializing(false)
       return
     }
 
@@ -81,14 +125,19 @@ export default function Students() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, university_id, study_year, is_verified_student, is_pre_student')
+      .select('id, city_id, university_id, school_id, department_id, study_year, is_verified_student, is_pre_student')
       .eq('id', userId)
       .maybeSingle()
 
     if (profileError || !profileData) {
       const details = profileError?.message ? ` (${profileError.message})` : ''
-      setErrorMessage(t({ en: `Unable to load profile${details}.`, el: `Αδυναμια φορτωσης προφιλ${details}.` }))
-      setIsLoading(false)
+      setErrorMessage(
+        t({
+          en: `Unable to load profile${details}.`,
+          el: `Δεν ήταν δυνατή η φόρτωση προφίλ${details}.`,
+        }),
+      )
+      setIsInitializing(false)
       return
     }
 
@@ -96,62 +145,15 @@ export default function Students() {
     const verified = currentProfile.is_verified_student === true
     const preStudent = currentProfile.is_pre_student === true && !verified
 
+    setCurrentCityId(currentProfile.city_id)
     setCurrentUniversityId(currentProfile.university_id)
+    setCurrentSchoolId(currentProfile.school_id)
+    setCurrentDepartmentId(currentProfile.department_id)
     setCurrentStudyYear(currentProfile.study_year)
     setIsVerifiedStudent(verified)
     setIsPreStudent(preStudent)
 
-    const peersWithSocial = await supabase
-      .from('public_profiles')
-      .select(
-        'id, display_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student, followers_count, last_seen_at',
-      )
-      .neq('id', userId)
-      .limit(240)
-
-    let peerRows: PeerProfileRow[] = []
-    if (peersWithSocial.error && hasMissingSchemaError(peersWithSocial.error, 'followers_count')) {
-      const peersLegacy = await supabase
-        .from('public_profiles')
-        .select(
-          'id, display_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student',
-        )
-        .neq('id', userId)
-        .limit(240)
-
-      peerRows = ((peersLegacy.data ?? []) as PeerProfileRow[]).map((peer) => ({
-        ...peer,
-        followers_count: 0,
-        last_seen_at: null,
-      }))
-    } else if (peersWithSocial.error) {
-      const details = peersWithSocial.error.message ? ` (${peersWithSocial.error.message})` : ''
-      setErrorMessage(t({ en: `Unable to load students${details}.`, el: `Αδυναμια φορτωσης φοιτητων${details}.` }))
-      setIsLoading(false)
-      return
-    } else {
-      peerRows = (peersWithSocial.data ?? []) as PeerProfileRow[]
-    }
-
-    const universityIds = Array.from(
-      new Set(peerRows.map((peer) => peer.university_id).filter((id): id is string => Boolean(id))),
-    )
-    if (universityIds.length > 0) {
-      const { data: universityRows } = await supabase
-        .from('universities')
-        .select('id, name')
-        .in('id', universityIds)
-
-      setUniversitiesMap(new Map(((universityRows ?? []) as UniversityRow[]).map((row) => [row.id, row.name])))
-    } else {
-      setUniversitiesMap(new Map())
-    }
-
-    const followsRes = await supabase
-      .from('follows')
-      .select('followed_id')
-      .eq('follower_id', userId)
-
+    const followsRes = await supabase.from('follows').select('followed_id').eq('follower_id', userId)
     if (hasMissingSchemaError(followsRes.error, 'follows')) {
       setSupportsFollowSystem(false)
       setFollowedIds(new Set())
@@ -160,58 +162,203 @@ export default function Students() {
       setFollowedIds(new Set((followsRes.data ?? []).map((item) => item.followed_id)))
     }
 
-    setPeers(peerRows)
-    setIsLoading(false)
+    setIsInitializing(false)
   }, [t])
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
-      void loadStudents()
+      void loadInitialContext()
     }, 0)
     return () => window.clearTimeout(timerId)
-  }, [loadStudents])
+  }, [loadInitialContext])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadCities = async () => {
+      const { data, error } = await supabase.from('cities').select('id, name').order('name')
+      if (!mounted || error) return
+      setCities((data ?? []) as LookupOption[])
+    }
+
+    void loadCities()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadUniversities = async () => {
+      if (!filterCityId) {
+        const { data, error } = await supabase.from('universities').select('id, name').order('name')
+        if (!mounted || error) return
+        setUniversities((data ?? []) as LookupOption[])
+        return
+      }
+
+      const { data, error } = await fetchUniversitiesForCity(filterCityId)
+      if (!mounted || error) return
+      setUniversities((data ?? []) as LookupOption[])
+    }
+
+    void loadUniversities()
+    return () => {
+      mounted = false
+    }
+  }, [filterCityId])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadSchools = async () => {
+      if (!filterUniversityId) {
+        setSchools([])
+        setFilterSchoolId('')
+        setDepartments([])
+        setFilterDepartmentId('')
+        return
+      }
+
+      const { data, error } = await fetchSchoolsForUniversity(filterUniversityId, {
+        cityId: filterCityId || null,
+      })
+      if (!mounted || error) return
+      setSchools((data ?? []) as LookupOption[])
+    }
+
+    void loadSchools()
+    return () => {
+      mounted = false
+    }
+  }, [filterCityId, filterUniversityId])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadDepartments = async () => {
+      if (!filterSchoolId) {
+        setDepartments([])
+        setFilterDepartmentId('')
+        return
+      }
+
+      const { data, error } = await fetchDepartmentsForSchool(filterSchoolId, {
+        cityId: filterCityId || null,
+      })
+      if (!mounted || error) return
+      setDepartments((data ?? []) as LookupOption[])
+    }
+
+    void loadDepartments()
+    return () => {
+      mounted = false
+    }
+  }, [filterCityId, filterSchoolId])
+
+  const loadPeers = useCallback(async () => {
+    if (!currentUserId) return
+
+    setIsLoadingPeers(true)
+    setErrorMessage('')
+
+    let withSocialQuery = supabase
+      .from('public_profiles')
+      .select(
+        'id, display_name, avatar_url, city_id, university_id, school_id, department_id, study_year, is_verified_student, is_pre_student, followers_count, last_seen_at',
+      )
+      .neq('id', currentUserId)
+      .limit(240)
+
+    if (filterCityId) withSocialQuery = withSocialQuery.eq('city_id', filterCityId)
+    if (filterUniversityId) withSocialQuery = withSocialQuery.eq('university_id', filterUniversityId)
+    if (filterSchoolId) withSocialQuery = withSocialQuery.eq('school_id', filterSchoolId)
+    if (filterDepartmentId) withSocialQuery = withSocialQuery.eq('department_id', filterDepartmentId)
+
+    const peersWithSocial = await withSocialQuery
+
+    let peerRows: PeerProfileRow[] = []
+    if (peersWithSocial.error && hasMissingSchemaError(peersWithSocial.error, 'followers_count')) {
+      let peersLegacyQuery = supabase
+        .from('public_profiles')
+        .select('id, display_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student')
+        .neq('id', currentUserId)
+        .limit(240)
+
+      if (filterUniversityId) peersLegacyQuery = peersLegacyQuery.eq('university_id', filterUniversityId)
+
+      const peersLegacy = await peersLegacyQuery
+      peerRows = ((peersLegacy.data ?? []) as PeerProfileRow[]).map((peer) => ({
+        ...peer,
+        city_id: null,
+        school_id: null,
+        department_id: null,
+        followers_count: 0,
+        last_seen_at: null,
+      }))
+    } else if (peersWithSocial.error) {
+      const details = peersWithSocial.error.message ? ` (${peersWithSocial.error.message})` : ''
+      setErrorMessage(
+        t({
+          en: `Unable to load students${details}.`,
+          el: `Δεν ήταν δυνατή η φόρτωση φοιτητών${details}.`,
+        }),
+      )
+      setPeers([])
+      setUniversitiesMap(new Map())
+      setIsLoadingPeers(false)
+      return
+    } else {
+      peerRows = (peersWithSocial.data ?? []) as PeerProfileRow[]
+    }
+
+    const universityIds = Array.from(
+      new Set(peerRows.map((peer) => peer.university_id).filter((id): id is string => Boolean(id))),
+    )
+
+    if (universityIds.length > 0) {
+      const { data: universityRows } = await supabase
+        .from('universities')
+        .select('id, name')
+        .in('id', universityIds)
+      setUniversitiesMap(new Map(((universityRows ?? []) as UniversityRow[]).map((row) => [row.id, row.name])))
+    } else {
+      setUniversitiesMap(new Map())
+    }
+
+    setPeers(peerRows)
+    setIsLoadingPeers(false)
+  }, [currentUserId, filterCityId, filterDepartmentId, filterSchoolId, filterUniversityId, t])
+
+  useEffect(() => {
+    void loadPeers()
+  }, [loadPeers])
 
   const visiblePeers = useMemo(() => {
     const normalized = search.trim().toLowerCase()
     let rows = [...peers]
 
-    if (viewMode === 'recommended') {
-      const sameUniversity = rows.filter(
-        (peer) => currentUniversityId !== null && peer.university_id === currentUniversityId,
-      )
-      const sameYear = rows.filter(
-        (peer) =>
-          currentStudyYear !== null &&
-          peer.study_year !== null &&
-          peer.study_year === currentStudyYear &&
-          peer.university_id !== currentUniversityId,
-      )
-      const rest = rows.filter(
-        (peer) =>
-          !(currentUniversityId !== null && peer.university_id === currentUniversityId) &&
-          !(
-            currentStudyYear !== null &&
-            peer.study_year !== null &&
-            peer.study_year === currentStudyYear
-          ),
-      )
-
-      rows = [...sameUniversity, ...sameYear, ...rest]
+    const recommendationContext: RecommendationContext = {
+      cityId: currentCityId,
+      universityId: currentUniversityId,
+      schoolId: currentSchoolId,
+      departmentId: currentDepartmentId,
+      studyYear: currentStudyYear,
     }
 
-    rows = rows.sort((a, b) => {
-      const aVerified = a.is_verified_student === true && a.is_pre_student !== true
-      const bVerified = b.is_verified_student === true && b.is_pre_student !== true
-      if (aVerified !== bVerified) return aVerified ? -1 : 1
-
-      const aUni = currentUniversityId !== null && a.university_id === currentUniversityId
-      const bUni = currentUniversityId !== null && b.university_id === currentUniversityId
-      if (aUni !== bUni) return aUni ? -1 : 1
-      const aYear = currentStudyYear !== null && a.study_year === currentStudyYear
-      const bYear = currentStudyYear !== null && b.study_year === currentStudyYear
-      if (aYear !== bYear) return aYear ? -1 : 1
-      return (b.followers_count ?? 0) - (a.followers_count ?? 0)
-    })
+    if (viewMode === 'recommended') {
+      const rankedRows = sortByRecommendation(rows, recommendationContext)
+      const closeRows = rankedRows.filter((peer) => recommendationScore(peer, recommendationContext) > 0)
+      rows = closeRows.length > 0 ? closeRows : rankedRows
+    } else {
+      rows = [...rows].sort((a, b) => {
+        const aVerified = a.is_verified_student === true && a.is_pre_student !== true
+        const bVerified = b.is_verified_student === true && b.is_pre_student !== true
+        if (aVerified !== bVerified) return aVerified ? -1 : 1
+        return (b.followers_count ?? 0) - (a.followers_count ?? 0)
+      })
+    }
 
     if (!normalized) return rows.slice(0, 80)
 
@@ -224,7 +371,17 @@ export default function Students() {
         return name.includes(normalized) || universityName.includes(normalized)
       })
       .slice(0, 80)
-  }, [currentStudyYear, currentUniversityId, peers, search, universitiesMap, viewMode])
+  }, [
+    currentCityId,
+    currentDepartmentId,
+    currentSchoolId,
+    currentStudyYear,
+    currentUniversityId,
+    peers,
+    search,
+    universitiesMap,
+    viewMode,
+  ])
 
   const handleToggleFollow = async (targetId: string) => {
     if (
@@ -263,14 +420,24 @@ export default function Students() {
     }
   }
 
-  if (isLoading) {
+  const clearFilters = () => {
+    setFilterCityId('')
+    setFilterUniversityId('')
+    setFilterSchoolId('')
+    setFilterDepartmentId('')
+  }
+
+  const fieldClass =
+    'rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-primary)]'
+
+  if (isInitializing) {
     return (
       <section className="space-y-2">
         <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-          {t({ en: 'Students', el: 'Φοιτητες' })}
+          {t({ en: 'Students', el: 'Φοιτητές' })}
         </h1>
         <p className="text-sm text-[var(--text-secondary)]">
-          {t({ en: 'Loading student recommendations...', el: 'Φορτωση προτασεων φοιτητων...' })}
+          {t({ en: 'Loading student recommendations...', el: 'Φόρτωση προτάσεων φοιτητών...' })}
         </p>
       </section>
     )
@@ -280,14 +447,15 @@ export default function Students() {
     <section className="space-y-4">
       <header className="social-card space-y-3 p-5">
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {t({ en: 'Students', el: 'Φοιτητες' })}
+          {t({ en: 'Students', el: 'Φοιτητές' })}
         </h1>
         <p className="text-sm text-[var(--text-secondary)]">
           {t({
             en: 'Find and follow students from your university and year.',
-            el: 'Βρες και ακολουθησε φοιτητες απο το πανεπιστημιο και το ετος σου.',
+            el: 'Βρες και ακολούθησε φοιτητές από το πανεπιστήμιο και το έτος σου.',
           })}
         </p>
+
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -298,7 +466,7 @@ export default function Students() {
             }`}
             onClick={() => setViewMode('recommended')}
           >
-            {t({ en: 'Recommended', el: 'Προτεινομενοι' })}
+            {t({ en: 'Recommended', el: 'Προτεινόμενοι' })}
           </button>
           <button
             type="button"
@@ -309,32 +477,106 @@ export default function Students() {
             }`}
             onClick={() => setViewMode('all')}
           >
-            {t({ en: 'All students', el: 'Ολοι οι φοιτητες' })}
+            {t({ en: 'All students', el: 'Όλοι οι φοιτητές' })}
           </button>
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={t({ en: 'Search by name or university', el: 'Αναζητηση ονοματος ή πανεπιστημιου' })}
+            placeholder={t({ en: 'Search by name or university', el: 'Αναζήτηση ονόματος ή πανεπιστημίου' })}
             className="min-w-[220px] rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-4 py-1.5 text-xs text-[var(--text-primary)]"
           />
         </div>
+
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <select
+            className={fieldClass}
+            value={filterCityId}
+            onChange={(event) => setFilterCityId(event.target.value)}
+          >
+            <option value="">{t({ en: 'All cities', el: 'Όλες οι πόλεις' })}</option>
+            {cities.map((city) => (
+              <option key={city.id} value={city.id}>
+                {city.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className={fieldClass}
+            value={filterUniversityId}
+            onChange={(event) => {
+              setFilterUniversityId(event.target.value)
+              setFilterSchoolId('')
+              setFilterDepartmentId('')
+            }}
+          >
+            <option value="">{t({ en: 'All universities', el: 'Όλα τα πανεπιστήμια' })}</option>
+            {universities.map((university) => (
+              <option key={university.id} value={university.id}>
+                {university.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className={fieldClass}
+            value={filterSchoolId}
+            onChange={(event) => {
+              setFilterSchoolId(event.target.value)
+              setFilterDepartmentId('')
+            }}
+            disabled={!filterUniversityId}
+          >
+            <option value="">{t({ en: 'All schools', el: 'Όλες οι σχολές' })}</option>
+            {schools.map((school) => (
+              <option key={school.id} value={school.id}>
+                {school.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className={fieldClass}
+            value={filterDepartmentId}
+            onChange={(event) => setFilterDepartmentId(event.target.value)}
+            disabled={!filterSchoolId}
+          >
+            <option value="">{t({ en: 'All departments', el: 'Όλα τα τμήματα' })}</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-lg border border-[var(--border-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            {t({ en: 'Clear filters', el: 'Καθαρισμός φίλτρων' })}
+          </button>
+        </div>
+
         {!supportsFollowSystem ? (
           <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
             {t({
               en: 'Follow system is disabled until social migrations are applied.',
-              el: 'Το follow συστημα ειναι απενεργοποιημενο μεχρι να εφαρμοστουν τα social migrations.',
+              el: 'Το follow σύστημα είναι απενεργοποιημένο μέχρι να εφαρμοστούν τα social migrations.',
             })}
           </p>
         ) : null}
+
         {isPreStudent ? (
           <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
             {t({
               en: 'Pre-student accounts can browse students but cannot follow yet.',
-              el: 'Οι pre-student λογαριασμοι βλεπουν φοιτητες αλλα δεν μπορουν ακομα να κανουν follow.',
+              el: 'Οι pre-student λογαριασμοί βλέπουν φοιτητές αλλά δεν μπορούν ακόμα να κάνουν follow.',
             })}
           </p>
         ) : null}
+
         {errorMessage ? (
           <p className="rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
             {errorMessage}
@@ -342,16 +584,22 @@ export default function Students() {
         ) : null}
       </header>
 
-      {visiblePeers.length === 0 ? (
+      {isLoadingPeers ? (
         <section className="social-card p-5 text-center">
           <p className="text-sm text-[var(--text-secondary)]">
-            {t({ en: 'No students found for this filter.', el: 'Δεν βρεθηκαν φοιτητες για αυτο το filter.' })}
+            {t({ en: 'Loading students...', el: 'Φόρτωση φοιτητών...' })}
+          </p>
+        </section>
+      ) : visiblePeers.length === 0 ? (
+        <section className="social-card p-5 text-center">
+          <p className="text-sm text-[var(--text-secondary)]">
+            {t({ en: 'No students found for this filter.', el: 'Δεν βρέθηκαν φοιτητές για αυτό το φίλτρο.' })}
           </p>
         </section>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visiblePeers.map((peer) => {
-            const peerName = peer.display_name ?? t({ en: 'Student', el: 'Φοιτητης' })
+            const peerName = peer.display_name ?? t({ en: 'Student', el: 'Φοιτητής' })
             const isFollowing = followedIds.has(peer.id)
             const canFollow =
               isVerifiedStudent && !isPreStudent && supportsFollowSystem && peer.is_verified_student === true
@@ -366,8 +614,8 @@ export default function Students() {
                         <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{peerName}</p>
                         <p className="text-xs text-[var(--text-secondary)]">
                           {peer.university_id
-                            ? universitiesMap.get(peer.university_id) ?? t({ en: 'University', el: 'Πανεπιστημιο' })
-                            : t({ en: 'University', el: 'Πανεπιστημιο' })}
+                            ? universitiesMap.get(peer.university_id) ?? t({ en: 'University', el: 'Πανεπιστήμιο' })
+                            : t({ en: 'University', el: 'Πανεπιστήμιο' })}
                         </p>
                       </div>
                     </div>
@@ -383,19 +631,19 @@ export default function Students() {
                       }`}
                     >
                       {isFollowing
-                        ? t({ en: 'Following', el: 'Ακολουθεις' })
-                        : t({ en: 'Follow', el: 'Ακολουθησε' })}
+                        ? t({ en: 'Following', el: 'Ακολουθείς' })
+                        : t({ en: 'Follow', el: 'Ακολούθησε' })}
                     </button>
                   ) : (
                     <span className="text-[10px] font-semibold text-amber-200">
-                      {t({ en: 'Locked', el: 'Κλειδωμενο' })}
+                      {t({ en: 'Locked', el: 'Κλειδωμένο' })}
                     </span>
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
                   <span className="rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-0.5">
                     {peer.study_year
-                      ? t({ en: `Year ${peer.study_year}`, el: `Ετος ${peer.study_year}` })
+                      ? t({ en: `Year ${peer.study_year}`, el: `Έτος ${peer.study_year}` })
                       : t({ en: 'Campus', el: 'Campus' })}
                   </span>
                   <span className="rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-0.5">
@@ -403,7 +651,7 @@ export default function Students() {
                   </span>
                   <span className="rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2 py-0.5">
                     {peer.is_verified_student === true && peer.is_pre_student !== true
-                      ? t({ en: 'Verified', el: 'Επαληθευμενος' })
+                      ? t({ en: 'Verified', el: 'Επαληθευμένος' })
                       : t({ en: 'Pre-student', el: 'Pre-student' })}
                   </span>
                 </div>

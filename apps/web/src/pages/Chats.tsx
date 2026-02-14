@@ -133,6 +133,7 @@ export default function Chats() {
 
   const typingStopTimeoutRef = useRef<number | null>(null)
   const typingHideTimeoutRef = useRef<number | null>(null)
+  const inboxRefreshTimeoutRef = useRef<number | null>(null)
   const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -156,15 +157,20 @@ export default function Chats() {
     [allConversations],
   )
 
-  const loadConversations = useCallback(async () => {
-    setIsLoadingConversations(true)
-    setConversationError('')
+  const loadConversations = useCallback(async (options?: { silent?: boolean }) => {
+    const isSilentRefresh = options?.silent === true
+    if (!isSilentRefresh) {
+      setIsLoadingConversations(true)
+      setConversationError('')
+    }
 
     const { data: authData, error: authError } = await supabase.auth.getUser()
     if (authError || !authData.user) {
       const details = authError?.message ? ` (${authError.message})` : ''
-      setConversationError(`Unable to load conversations${details}.`)
-      setIsLoadingConversations(false)
+      if (!isSilentRefresh) {
+        setConversationError(`Unable to load conversations${details}.`)
+        setIsLoadingConversations(false)
+      }
       return
     }
 
@@ -201,8 +207,10 @@ export default function Chats() {
 
       if (memberLegacyRes.error) {
         const details = memberLegacyRes.error.message ? ` (${memberLegacyRes.error.message})` : ''
-        setConversationError(`Unable to load conversations${details}.`)
-        setIsLoadingConversations(false)
+        if (!isSilentRefresh) {
+          setConversationError(`Unable to load conversations${details}.`)
+          setIsLoadingConversations(false)
+        }
         return
       }
 
@@ -213,8 +221,10 @@ export default function Chats() {
       }))
     } else if (memberWithReadRes.error) {
       const details = memberWithReadRes.error.message ? ` (${memberWithReadRes.error.message})` : ''
-      setConversationError(`Unable to load conversations${details}.`)
-      setIsLoadingConversations(false)
+      if (!isSilentRefresh) {
+        setConversationError(`Unable to load conversations${details}.`)
+        setIsLoadingConversations(false)
+      }
       return
     } else {
       members = (memberWithReadRes.data ?? []) as ConversationMember[]
@@ -225,7 +235,9 @@ export default function Chats() {
 
     if (conversationIds.length === 0) {
       setAllConversations([])
-      setIsLoadingConversations(false)
+      if (!isSilentRefresh) {
+        setIsLoadingConversations(false)
+      }
       return
     }
 
@@ -342,8 +354,28 @@ export default function Chats() {
     })
 
     setAllConversations(sortConversations(summaries))
-    setIsLoadingConversations(false)
+    if (!isSilentRefresh) {
+      setIsLoadingConversations(false)
+    }
   }, [supportsMessageImages, t])
+
+  const scheduleConversationsRefresh = useCallback(() => {
+    if (inboxRefreshTimeoutRef.current !== null) return
+    inboxRefreshTimeoutRef.current = window.setTimeout(() => {
+      inboxRefreshTimeoutRef.current = null
+      void loadConversations({ silent: true })
+    }, 250)
+  }, [loadConversations])
+
+  useEffect(
+    () => () => {
+      if (inboxRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(inboxRefreshTimeoutRef.current)
+        inboxRefreshTimeoutRef.current = null
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -367,6 +399,67 @@ export default function Chats() {
 
     return () => window.clearInterval(intervalId)
   }, [currentUserId])
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    const inboxChannel = supabase
+      .channel(`chat-inbox:${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        scheduleConversationsRefresh,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+        },
+        scheduleConversationsRefresh,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        scheduleConversationsRefresh,
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(inboxChannel)
+    }
+  }, [currentUserId, scheduleConversationsRefresh])
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    const intervalId = window.setInterval(scheduleConversationsRefresh, 8000)
+    const handleFocus = () => scheduleConversationsRefresh()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleConversationsRefresh()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [currentUserId, scheduleConversationsRefresh])
 
   useEffect(() => {
     if (!allConversations.length) return
@@ -934,7 +1027,7 @@ export default function Chats() {
         )}
       </aside>
 
-      <section className="social-card flex min-h-[70vh] flex-col overflow-hidden">
+      <section className="social-card flex h-[calc(100vh-11rem)] min-h-[480px] max-h-[calc(100vh-7rem)] min-w-0 flex-col overflow-hidden md:h-[calc(100vh-9rem)] md:min-h-[560px]">
         {selectedConversation ? (
           <>
             <header className="border-b border-[var(--border-primary)] bg-gradient-to-r from-blue-500/10 via-transparent to-cyan-400/10 px-4 py-3">
@@ -947,7 +1040,7 @@ export default function Chats() {
               </div>
             </header>
 
-            <div className="chat-surface flex-1 overflow-y-auto px-3 py-3">
+            <div className="chat-surface min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pr-2">
               {isLoadingMessages ? <p className="text-sm text-[var(--text-secondary)]">{t({ en: 'Loading messages...', el: 'Φορτωση μηνυματων...' })}</p> : null}
               {messageError ? <p className="rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{messageError}</p> : null}
 

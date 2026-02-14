@@ -10,7 +10,7 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="inline-flex items-center gap-2 rounded-full border border-[var(--border-primary)] bg-[var(--surface-card)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] shadow-sm transition hover:text-[var(--text-primary)]"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-card)] text-[13px] shadow-sm transition hover:scale-[1.03]"
       aria-label={t({ en: 'Toggle theme', el: 'Εναλλαγή θέματος' })}
       title={
         isDark
@@ -18,15 +18,8 @@ export default function ThemeToggle() {
           : t({ en: 'Switch to dark mode', el: 'Μετάβαση σε σκοτεινό θέμα' })
       }
     >
-      <span
-        className={`h-2 w-2 rounded-full ${
-          isDark ? 'bg-cyan-400' : 'bg-blue-500'
-        }`}
-      />
-      <span>
-        {isDark
-          ? t({ en: 'Dark', el: 'Σκοτεινό' })
-          : t({ en: 'Light', el: 'Φωτεινό' })}
+      <span aria-hidden="true" className={isDark ? 'text-cyan-100' : 'text-amber-100'}>
+        {isDark ? '☾' : '☀'}
       </span>
     </button>
   )

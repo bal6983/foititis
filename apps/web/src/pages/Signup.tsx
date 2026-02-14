@@ -2,6 +2,11 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useI18n, type LocalizedMessage } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
+import {
+  fetchDepartmentsForSchool,
+  fetchSchoolsForUniversity,
+  fetchUniversitiesForCity,
+} from '../lib/universityLookup'
 
 type OptionItem = {
   id: string
@@ -10,6 +15,7 @@ type OptionItem = {
 
 type UniversityOption = OptionItem & {
   email_domains?: string[] | null
+  allowed_email_domains?: string[] | null
 }
 
 type OnboardingConfirmStorage = {
@@ -19,6 +25,8 @@ type OnboardingConfirmStorage = {
   university_name: string
   school_id: string | null
   school_name: string
+  department_id: string | null
+  department_name: string
 }
 
 function uniqueById<T extends { id: string }>(items: T[]) {
@@ -34,6 +42,13 @@ const extractEmailDomain = (value: string) => {
   const atIndex = value.lastIndexOf('@')
   if (atIndex === -1) return ''
   return normalizeDomain(value.slice(atIndex + 1))
+}
+
+const emailDomainMatchesUniversity = (domain: string, allowedDomains: string[]): boolean => {
+  if (!domain || allowedDomains.length === 0) return false
+  return allowedDomains.some(
+    (allowed) => domain === allowed || domain.endsWith('.' + allowed),
+  )
 }
 
 const persistOnboardingConfirmData = (data: OnboardingConfirmStorage) => {
@@ -53,20 +68,25 @@ export default function Signup() {
   const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [step, setStep] = useState<1 | 2>(1)
   const [studentType, setStudentType] = useState('')
   const [preStudentAcknowledged, setPreStudentAcknowledged] = useState(false)
   const [cityId, setCityId] = useState('')
   const [universityId, setUniversityId] = useState('')
   const [schoolId, setSchoolId] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
   const [cities, setCities] = useState<OptionItem[]>([])
   const [universities, setUniversities] = useState<UniversityOption[]>([])
   const [schools, setSchools] = useState<OptionItem[]>([])
+  const [departments, setDepartments] = useState<OptionItem[]>([])
   const [isLoadingCities, setIsLoadingCities] = useState(true)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
   const [isLoadingSchools, setIsLoadingSchools] = useState(false)
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false)
   const [citiesErrorMessage, setCitiesErrorMessage] = useState<LocalizedMessage | null>(null)
   const [universitiesErrorMessage, setUniversitiesErrorMessage] = useState<LocalizedMessage | null>(null)
   const [schoolsErrorMessage, setSchoolsErrorMessage] = useState<LocalizedMessage | null>(null)
+  const [departmentsErrorMessage, setDepartmentsErrorMessage] = useState<LocalizedMessage | null>(null)
   const [errorMessage, setErrorMessage] = useState<LocalizedMessage | null>(null)
   const [showEmailConfirmationMessage, setShowEmailConfirmationMessage] =
     useState(false)
@@ -126,11 +146,9 @@ export default function Signup() {
       setIsLoadingUniversities(true)
       setUniversitiesErrorMessage(null)
 
-      const { data, error } = await supabase
-        .from('universities')
-        .select('id, name, email_domains')
-        .eq('city_id', cityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchUniversitiesForCity(cityId, {
+        withDomains: true,
+      })
 
       if (!isMounted) return
 
@@ -149,7 +167,7 @@ export default function Signup() {
         return
       }
 
-      setUniversities(uniqueById(data ?? []))
+      setUniversities(uniqueById((data ?? []) as UniversityOption[]))
       setIsLoadingUniversities(false)
     }
 
@@ -173,11 +191,9 @@ export default function Signup() {
       setIsLoadingSchools(true)
       setSchoolsErrorMessage(null)
 
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('university_id', universityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchSchoolsForUniversity(universityId, {
+        cityId: cityId || null,
+      })
 
       if (!isMounted) return
 
@@ -205,7 +221,52 @@ export default function Signup() {
     return () => {
       isMounted = false
     }
-  }, [universityId])
+  }, [cityId, universityId])
+
+  useEffect(() => {
+    let isMounted = true
+
+    if (!schoolId) {
+      setDepartments([])
+      setIsLoadingDepartments(false)
+      return
+    }
+
+    const loadDepartments = async () => {
+      setIsLoadingDepartments(true)
+      setDepartmentsErrorMessage(null)
+
+      const { data, error } = await fetchDepartmentsForSchool(schoolId, {
+        cityId: cityId || null,
+      })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setDepartmentsErrorMessage(
+          withDetails(
+            {
+              en: 'Unable to load departments.',
+              el: 'Αδυναμία φόρτωσης τμημάτων.',
+            },
+            details,
+          ),
+        )
+        setIsLoadingDepartments(false)
+        return
+      }
+
+      setDepartments(uniqueById(data ?? []))
+      setIsLoadingDepartments(false)
+    }
+
+    loadDepartments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cityId, schoolId])
 
   const handleStudentTypeChange = (value: string) => {
     setStudentType(value)
@@ -214,8 +275,10 @@ export default function Signup() {
       setCityId('')
       setUniversityId('')
       setSchoolId('')
+      setDepartmentId('')
       setUniversities([])
       setSchools([])
+      setDepartments([])
     }
   }
 
@@ -223,12 +286,21 @@ export default function Signup() {
     setCityId(value)
     setUniversityId('')
     setSchoolId('')
+    setDepartmentId('')
     setSchools([])
+    setDepartments([])
   }
 
   const handleUniversityChange = (value: string) => {
     setUniversityId(value)
     setSchoolId('')
+    setDepartmentId('')
+    setDepartments([])
+  }
+
+  const handleSchoolChange = (value: string) => {
+    setSchoolId(value)
+    setDepartmentId('')
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -249,9 +321,9 @@ export default function Signup() {
       return
     }
 
-    if (studentType === 'student' && (!cityId || !universityId || !schoolId)) {
+    if (studentType === 'student' && (!cityId || !universityId || !schoolId || !departmentId)) {
       setErrorMessage({
-        en: 'Fill in your city, university, and school.',
+        en: 'Fill in your city, university, school, and department.',
         el: 'Συμπλήρωσε την πόλη, το πανεπιστήμιο και τη σχολή σου.',
       })
       setIsSubmitting(false)
@@ -272,6 +344,9 @@ export default function Signup() {
       (university) => university.id === universityId,
     )
     const selectedSchool = schools.find((school) => school.id === schoolId)
+    const selectedDepartment = departments.find(
+      (department) => department.id === departmentId,
+    )
 
     persistOnboardingConfirmData({
       city_id: cityId || null,
@@ -280,6 +355,8 @@ export default function Signup() {
       university_name: selectedUniversity?.name ?? '',
       school_id: schoolId || null,
       school_name: selectedSchool?.name ?? '',
+      department_id: departmentId || null,
+      department_name: selectedDepartment?.name ?? '',
     })
 
     const { data, error } = await supabase.auth.signUp({
@@ -355,6 +432,8 @@ export default function Signup() {
       city_id?: string | null
       university_id?: string | null
       school_id?: string | null
+      department_id?: string | null
+      university_email?: string | null
     } = {
       id: data.user.id,
       email: profileEmail,
@@ -367,10 +446,13 @@ export default function Signup() {
       profilePayload.city_id = cityId
       profilePayload.university_id = universityId
       profilePayload.school_id = schoolId
+      profilePayload.department_id = departmentId
+      profilePayload.university_email = profileEmail
     } else {
-      profilePayload.city_id = null
+      profilePayload.city_id = cityId || null
       profilePayload.university_id = null
       profilePayload.school_id = null
+      profilePayload.department_id = null
     }
 
     const { error: profileError } = await supabase
@@ -392,6 +474,10 @@ export default function Signup() {
       return
     }
 
+    if (studentType === 'student') {
+      await supabase.rpc('finalize_university_verification')
+    }
+
     setIsSubmitting(false)
     navigate('/dashboard')
   }
@@ -400,7 +486,10 @@ export default function Signup() {
   const selectedUniversity = universities.find(
     (university) => university.id === universityId,
   )
-  const selectedUniversityDomains = (selectedUniversity?.email_domains ?? [])
+  const selectedUniversityDomains =
+    (selectedUniversity?.allowed_email_domains?.length
+      ? selectedUniversity.allowed_email_domains
+      : selectedUniversity?.email_domains ?? [])
     .map(normalizeDomain)
     .filter(Boolean)
   const emailDomain = extractEmailDomain(email)
@@ -408,15 +497,16 @@ export default function Signup() {
     isStudent &&
     Boolean(universityId) &&
     emailDomain.length > 0 &&
-    !selectedUniversityDomains.includes(emailDomain)
+    !emailDomainMatchesUniversity(emailDomain, selectedUniversityDomains)
   const isUniversityDisabled = !isStudent || !cityId || isLoadingUniversities
   const isSchoolDisabled = !isStudent || !universityId || isLoadingSchools
+  const isDepartmentDisabled = !isStudent || !schoolId || isLoadingDepartments
   const isSubmitDisabled = isSubmitting || isStudentEmailDomainMismatch
   const emailField = (
-    <label className="block space-y-1 text-sm font-medium">
+    <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
       Email
       <input
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-blue-400/60 focus:outline-none"
         type="email"
         autoComplete="email"
         placeholder="you@uni.gr"
@@ -425,7 +515,7 @@ export default function Signup() {
         required
       />
       {isStudent ? (
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-[var(--text-secondary)]">
           {t({
             en: 'Use your university email (e.g. @auth.gr)',
             el: 'Χρησιμοποίησε το πανεπιστημιακό σου email (π.χ. @auth.gr)',
@@ -433,7 +523,7 @@ export default function Signup() {
         </span>
       ) : null}
       {isStudentEmailDomainMismatch ? (
-        <span className="text-xs text-rose-600">
+        <span className="text-xs text-rose-300">
           {t({
             en: 'For students, a university email is required.',
             el: 'Για φοιτητές απαιτείται το πανεπιστημιακό email.',
@@ -443,10 +533,10 @@ export default function Signup() {
     </label>
   )
   const passwordField = (
-    <label className="block space-y-1 text-sm font-medium">
+    <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
       {t({ en: 'Password', el: 'Κωδικός' })}
       <input
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-blue-400/60 focus:outline-none"
         type="password"
         autoComplete="new-password"
         placeholder={t({ en: 'At least 8 characters', el: 'Τουλάχιστον 8 χαρακτήρες' })}
@@ -464,7 +554,7 @@ export default function Signup() {
         <h1 className="text-2xl font-semibold">
           {t({ en: 'Create account', el: 'Δημιουργία λογαριασμού' })}
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-[var(--text-secondary)]">
           {t({
             en: 'Enter email and password and choose your status.',
             el: 'Συμπλήρωσε email και κωδικό και πες μας την ιδιότητά σου.',
@@ -472,42 +562,99 @@ export default function Signup() {
         </p>
       </header>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        {!isStudent ? emailField : null}
-        {!isStudent ? passwordField : null}
+      {step === 1 ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {t({
+              en: 'Are you a Student or a Pre-Student?',
+              el: 'Είσαι φοιτητής ή pre-student;',
+            })}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => {
+                handleStudentTypeChange('student')
+                setStep(2)
+              }}
+              className="social-card rounded-xl border border-[var(--border-primary)] p-4 text-left transition hover:translate-y-[-1px]"
+            >
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                {t({ en: 'Student', el: 'Φοιτητής' })}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t({
+                  en: 'Verified university email required.',
+                  el: 'Απαιτείται επαληθευμένο πανεπιστημιακό email.',
+                })}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleStudentTypeChange('pre-student')
+                setStep(2)
+              }}
+              className="social-card rounded-xl border border-[var(--border-primary)] p-4 text-left transition hover:translate-y-[-1px]"
+            >
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Pre-student</p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t({
+                  en: 'Limited access until university verification.',
+                  el: 'Περιορισμένη πρόσβαση μέχρι την επαλήθευση.',
+                })}
+              </p>
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-        <fieldset className="space-y-2 text-sm">
-          <legend className="font-medium">
-            {t({ en: 'Are you a student or pre-student?', el: 'Είσαι φοιτητής ή pre-student;' })}
-          </legend>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="student-type"
-              value="student"
-              checked={studentType === 'student'}
-              onChange={(event) => handleStudentTypeChange(event.target.value)}
-            />
-            {t({ en: 'Student', el: 'Φοιτητής' })}
+      <form className={step === 2 ? 'space-y-4' : 'hidden'} onSubmit={handleSubmit}>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            {isStudent
+              ? t({ en: 'Student Signup', el: 'Εγγραφή Φοιτητή' })
+              : t({ en: 'Pre-Student Signup', el: 'Εγγραφή Pre-student' })}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className="rounded-full border border-[var(--border-primary)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            {t({ en: 'Back', el: 'Πίσω' })}
+          </button>
+        </div>
+        {emailField}
+        {passwordField}
+
+        {!isStudent ? (
+          <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+            {t({ en: 'City (optional)', el: 'Πόλη (προαιρετικό)' })}
+            <select
+              className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-blue-400/60 focus:outline-none"
+              value={cityId}
+              onChange={(event) => handleCityChange(event.target.value)}
+              disabled={isLoadingCities}
+            >
+              <option value="">{t({ en: 'Select city', el: 'Επίλεξε πόλη' })}</option>
+              {cities.map((city) => (
+                <option key={city.id} value={city.id}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
+            {citiesErrorMessage ? (
+              <span className="text-xs text-rose-300">{t(citiesErrorMessage)}</span>
+            ) : null}
           </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="student-type"
-              value="pre-student"
-              checked={studentType === 'pre-student'}
-              onChange={(event) => handleStudentTypeChange(event.target.value)}
-            />
-            Pre-student
-          </label>
-        </fieldset>
+        ) : null}
 
         {isStudent ? (
           <div className="space-y-4">
-            <label className="block space-y-1 text-sm font-medium">
+            <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
               {t({ en: 'Study city', el: 'Πόλη σπουδών' })}
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-blue-400/60 focus:outline-none"
                 value={cityId}
                 onChange={(event) => handleCityChange(event.target.value)}
                 disabled={isLoadingCities}
@@ -521,14 +668,14 @@ export default function Signup() {
                 ))}
               </select>
               {citiesErrorMessage ? (
-                <span className="text-xs text-rose-600">{t(citiesErrorMessage)}</span>
+                <span className="text-xs text-rose-300">{t(citiesErrorMessage)}</span>
               ) : null}
             </label>
 
-            <label className="block space-y-1 text-sm font-medium">
+            <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
               {t({ en: 'University', el: 'Πανεπιστήμιο' })}
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-blue-400/60 focus:outline-none"
                 value={universityId}
                 onChange={(event) => handleUniversityChange(event.target.value)}
                 disabled={isUniversityDisabled}
@@ -542,16 +689,16 @@ export default function Signup() {
                 ))}
               </select>
               {universitiesErrorMessage ? (
-                <span className="text-xs text-rose-600">{t(universitiesErrorMessage)}</span>
+                <span className="text-xs text-rose-300">{t(universitiesErrorMessage)}</span>
               ) : null}
             </label>
 
-            <label className="block space-y-1 text-sm font-medium">
+            <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
               {t({ en: 'School', el: 'Σχολή' })}
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-blue-400/60 focus:outline-none"
                 value={schoolId}
-                onChange={(event) => setSchoolId(event.target.value)}
+                onChange={(event) => handleSchoolChange(event.target.value)}
                 disabled={isSchoolDisabled}
                 required
               >
@@ -563,14 +710,35 @@ export default function Signup() {
                 ))}
               </select>
               {schoolsErrorMessage ? (
-                <span className="text-xs text-rose-600">{t(schoolsErrorMessage)}</span>
+                <span className="text-xs text-rose-300">{t(schoolsErrorMessage)}</span>
+              ) : null}
+            </label>
+
+            <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+              {t({ en: 'Department', el: 'Τμήμα' })}
+              <select
+                className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-blue-400/60 focus:outline-none"
+                value={departmentId}
+                onChange={(event) => setDepartmentId(event.target.value)}
+                disabled={isDepartmentDisabled}
+                required
+              >
+                <option value="">{t({ en: 'Select department', el: 'Επίλεξε τμήμα' })}</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+              {departmentsErrorMessage ? (
+                <span className="text-xs text-rose-300">{t(departmentsErrorMessage)}</span>
               ) : null}
             </label>
           </div>
         ) : null}
 
         {studentType === 'pre-student' ? (
-          <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+          <div className="space-y-3 rounded-lg border border-amber-300/40 bg-amber-500/10 px-3 py-3 text-sm text-amber-100">
             <p>
               {t({
                 en: 'Pre-student profiles stay active for 4 months unless you verify with a university email. After 4 months, the profile is removed automatically.',
@@ -590,11 +758,8 @@ export default function Signup() {
           </div>
         ) : null}
 
-        {isStudent ? emailField : null}
-        {isStudent ? passwordField : null}
-
         <button
-          className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
           disabled={isSubmitDisabled}
         >
@@ -605,12 +770,12 @@ export default function Signup() {
       </form>
 
       {errorMessage ? (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
           {t(errorMessage)}
         </p>
       ) : null}
       {showEmailConfirmationMessage ? (
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        <div className="space-y-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)]">
           <p className="font-semibold">
             {t({ en: 'Check your email', el: 'Έλεγξε το email σου' })}
           </p>
@@ -620,7 +785,7 @@ export default function Signup() {
               el: 'Σου στείλαμε ένα email επιβεβαίωσης για να ενεργοποιήσεις τον λογαριασμό σου. Άνοιξε το email και πάτησε τον σύνδεσμο επιβεβαίωσης για να συνεχίσεις.',
             })}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--text-secondary)]">
             {t({
               en: 'If you do not see it, check your spam folder.',
               el: 'Αν δεν το βλέπεις, έλεγξε και τον φάκελο ανεπιθύμητης αλληλογραφίας (spam).',
@@ -629,9 +794,9 @@ export default function Signup() {
         </div>
       ) : null}
 
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-[var(--text-secondary)]">
         {t({ en: 'Already have an account?', el: 'Έχεις ήδη λογαριασμό;' })}{' '}
-        <Link className="font-semibold text-slate-900" to="/login">
+        <Link className="font-semibold text-[var(--accent)]" to="/login">
           {t({ en: 'Sign in', el: 'Σύνδεση' })}
         </Link>
         .
@@ -639,3 +804,4 @@ export default function Signup() {
     </section>
   )
 }
+

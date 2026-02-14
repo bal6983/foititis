@@ -81,6 +81,8 @@ export default function Profile() {
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [avatarUploadMessage, setAvatarUploadMessage] = useState('')
   const [isAvatarUploading, setIsAvatarUploading] = useState(false)
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
 
   const [universityName, setUniversityName] = useState('')
   const [schoolName, setSchoolName] = useState('')
@@ -275,7 +277,7 @@ export default function Profile() {
     })
   }, [commentsCount, isVerifiedStudent, listingsCount, streakDays, wantedCount])
 
-  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
 
@@ -286,13 +288,26 @@ export default function Profile() {
       return
     }
 
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarUploadMessage('Max file size is 2 MB.')
+      return
+    }
+
+    setAvatarUploadMessage('')
+    setPendingAvatarFile(file)
+    setAvatarPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handleAvatarConfirm = async () => {
+    if (!pendingAvatarFile || !userId) return
+
     setIsAvatarUploading(true)
     setAvatarUploadMessage('')
 
     const filePath = `avatars/${userId}.jpg`
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(filePath, file, { upsert: true, contentType: file.type })
+      .upload(filePath, pendingAvatarFile, { upsert: true, contentType: pendingAvatarFile.type })
 
     if (uploadError) {
       setAvatarUploadMessage('Avatar upload failed.')
@@ -301,7 +316,7 @@ export default function Profile() {
     }
 
     const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-    const publicUrl = data.publicUrl
+    const publicUrl = `${data.publicUrl}?t=${Date.now()}`
 
     const { error: updateError } = await supabase
       .from('profiles')
@@ -318,6 +333,13 @@ export default function Profile() {
     setAvatarLoadError(false)
     setAvatarUploadMessage('Avatar updated.')
     setIsAvatarUploading(false)
+    handleAvatarCancel()
+  }
+
+  const handleAvatarCancel = () => {
+    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl)
+    setPendingAvatarFile(null)
+    setAvatarPreviewUrl(null)
   }
 
   const handleVerificationRequest = async () => {
@@ -377,17 +399,39 @@ export default function Profile() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <label className="rounded-xl border border-[var(--border-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">
-              {isAvatarUploading
-                ? t({ en: 'Uploading...', el: 'Ανεβασμα...' })
-                : t({ en: 'Change avatar', el: 'Αλλαγη avatar' })}
-              <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isAvatarUploading} />
-            </label>
+            {!avatarPreviewUrl && (
+              <label className="cursor-pointer rounded-xl border border-[var(--border-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:border-blue-400/50">
+                {t({ en: 'Change avatar', el: 'Αλλαγη avatar' })}
+                <input type="file" className="hidden" accept="image/*" onChange={handleAvatarSelect} disabled={isAvatarUploading} />
+              </label>
+            )}
             <Link to="/profile/edit" className="rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950">
               {t({ en: 'Edit profile', el: 'Επεξεργασια προφιλ' })}
             </Link>
           </div>
         </div>
+
+        {avatarPreviewUrl && (
+          <div className="mt-3 flex items-center gap-3">
+            <img src={avatarPreviewUrl} alt="Preview" className="h-16 w-16 rounded-full object-cover ring-2 ring-blue-400/40" />
+            <div className="flex gap-2">
+              <button
+                onClick={handleAvatarConfirm}
+                disabled={isAvatarUploading}
+                className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
+              >
+                {isAvatarUploading ? t({ en: 'Uploading...', el: 'Ανεβασμα...' }) : t({ en: 'Upload', el: 'Ανεβασμα' })}
+              </button>
+              <button
+                onClick={handleAvatarCancel}
+                disabled={isAvatarUploading}
+                className="rounded-lg border border-[var(--border-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] disabled:opacity-50"
+              >
+                {t({ en: 'Cancel', el: 'Ακυρωση' })}
+              </button>
+            </div>
+          </div>
+        )}
 
         {avatarUploadMessage ? <p className="mt-3 text-xs text-[var(--text-secondary)]">{avatarUploadMessage}</p> : null}
 

@@ -81,11 +81,14 @@ export default function ProtectedRoute() {
       if (!resolvedProfile) {
         const { data: createdProfile, error: createError } = await supabase
           .from('profiles')
-          .insert({
-            id: session.user.id,
-            is_verified_student: false,
-            is_pre_student: metadataIsPreStudent,
-          })
+          .upsert(
+            {
+              id: session.user.id,
+              is_verified_student: false,
+              is_pre_student: metadataIsPreStudent,
+            },
+            { onConflict: 'id', ignoreDuplicates: true },
+          )
           .select(
             'display_name, onboarding_completed, is_verified_student, university_email, city_id, university_id, school_id, is_pre_student',
           )
@@ -201,8 +204,8 @@ export default function ProtectedRoute() {
 
       const shouldFinalizeVerification =
         session.user.email_confirmed_at !== null &&
-        resolvedProfile.university_email !== null &&
-        resolvedProfile.is_verified_student === false
+        resolvedProfile.is_verified_student === false &&
+        resolvedProfile.university_id !== null
 
       if (
         shouldFinalizeVerification &&
@@ -213,6 +216,12 @@ export default function ProtectedRoute() {
         finalizeAttemptedRef.current.add(session.user.id)
 
         try {
+          if (!resolvedProfile.university_email && session.user.email) {
+            await supabase.rpc('request_university_verification', {
+              p_university_email: session.user.email,
+            })
+          }
+
           const { error: finalizeError } = await supabase.rpc(
             'finalize_university_verification',
           )

@@ -1,17 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/ui/Avatar'
 import LanguageToggle from '../components/ui/LanguageToggle'
 import ThemeToggle from '../components/ui/ThemeToggle'
 import { useI18n } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
+import {
+  isVerifiedCampusMember,
+  recommendationScore,
+  sortByRecommendation,
+  type RecommendationContext,
+} from '../lib/peerRecommendations'
 
 type ProfileRow = {
   id: string
   display_name: string | null
   full_name: string | null
   avatar_url: string | null
+  city_id: string | null
   university_id: string | null
+  school_id: string | null
+  department_id: string | null
   study_year: number | null
   is_verified_student: boolean | null
   is_pre_student: boolean | null
@@ -21,7 +30,10 @@ type PeerProfileRow = {
   id: string
   display_name: string | null
   avatar_url: string | null
+  city_id: string | null
   university_id: string | null
+  school_id: string | null
+  department_id: string | null
   study_year: number | null
   is_verified_student: boolean | null
   is_pre_student: boolean | null
@@ -58,6 +70,13 @@ type PostgrestErrorLike = {
   hint?: string | null
 }
 
+type PeerFilters = {
+  cityId?: string | null
+  universityId?: string | null
+  schoolId?: string | null
+  departmentId?: string | null
+}
+
 const ONLINE_WINDOW_MINUTES = 10
 
 const formatRelativeTime = (value: string) => {
@@ -83,6 +102,15 @@ const hasMissingSchemaError = (error: PostgrestErrorLike | null | undefined, tok
   )
 }
 
+const applyPeerFilters = (query: any, filters: PeerFilters) => {
+  let nextQuery = query
+  if (filters.universityId) nextQuery = nextQuery.eq('university_id', filters.universityId)
+  if (filters.schoolId) nextQuery = nextQuery.eq('school_id', filters.schoolId)
+  if (filters.departmentId) nextQuery = nextQuery.eq('department_id', filters.departmentId)
+  if (filters.cityId) nextQuery = nextQuery.eq('city_id', filters.cityId)
+  return nextQuery
+}
+
 export default function AppLayout() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -95,6 +123,8 @@ export default function AppLayout() {
   const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
   const [isPreStudent, setIsPreStudent] = useState(false)
   const [activeNowCount, setActiveNowCount] = useState(0)
+  const [activeNowOpen, setActiveNowOpen] = useState(false)
+  const [activeFollowingPeers, setActiveFollowingPeers] = useState<PeerProfileRow[]>([])
   const [trendingLines, setTrendingLines] = useState<string[]>([])
   const [followSuggestions, setFollowSuggestions] = useState<PeerProfileRow[]>([])
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
@@ -103,6 +133,11 @@ export default function AppLayout() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isBellPopping, setIsBellPopping] = useState(false)
   const [shellError, setShellError] = useState('')
+  const [notificationPanelPosition, setNotificationPanelPosition] = useState<{
+    top: number
+    left: number
+  } | null>(null)
+  const shellRefreshTimeoutRef = useRef<number | null>(null)
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
@@ -112,6 +147,7 @@ export default function AppLayout() {
   const leftNavItems = useMemo(
     () => [
       { to: '/dashboard', label: t({ en: 'Feed', el: 'Ροη' }) },
+      { to: '/universities', label: t({ en: 'Universities', el: 'Πανεπιστήμια' }) },
       { to: '/marketplace', label: t({ en: 'Marketplace', el: 'Αγορα' }) },
       { to: '/chats', label: t({ en: 'Messages', el: 'Μηνυματα' }) },
       { to: '/events', label: t({ en: 'Events', el: 'Εκδηλωσεις' }) },
@@ -200,17 +236,22 @@ export default function AppLayout() {
     }
   }, [])
 
-  const loadShell = useCallback(async () => {
-    setIsLoading(true)
-    setShellError('')
+  const loadShell = useCallback(async (options?: { silent?: boolean }) => {
+    const isSilentRefresh = options?.silent === true
+    if (!isSilentRefresh) {
+      setIsLoading(true)
+      setShellError('')
+    }
 
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData.user) {
       const details = userError?.message ? ` (${userError.message})` : ''
-      setShellError(
-        t({ en: `Unable to load workspace${details}.`, el: `Unable to load workspace${details}.` }),
-      )
-      setIsLoading(false)
+      if (!isSilentRefresh) {
+        setShellError(
+          t({ en: `Unable to load workspace${details}.`, el: `Unable to load workspace${details}.` }),
+        )
+        setIsLoading(false)
+      }
       return
     }
 
@@ -221,17 +262,19 @@ export default function AppLayout() {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select(
-        'id, display_name, full_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student',
+        'id, display_name, full_name, avatar_url, city_id, university_id, school_id, department_id, study_year, is_verified_student, is_pre_student',
       )
       .eq('id', userId)
       .maybeSingle()
 
     if (profileError || !profileData) {
       const details = profileError?.message ? ` (${profileError.message})` : ''
-      setShellError(
-        t({ en: `Unable to load profile${details}.`, el: `Unable to load profile${details}.` }),
-      )
-      setIsLoading(false)
+      if (!isSilentRefresh) {
+        setShellError(
+          t({ en: `Unable to load profile${details}.`, el: `Unable to load profile${details}.` }),
+        )
+        setIsLoading(false)
+      }
       return
     }
 
@@ -271,21 +314,20 @@ export default function AppLayout() {
       ? []
       : notificationsResponse.data ?? []
 
-    const loadPeerRows = async (universityId: string | null, limit: number) => {
-      const withSocialQuery = supabase
+    const loadPeerRows = async (limit: number, filters: PeerFilters) => {
+      let withSocialQuery = supabase
         .from('public_profiles')
         .select(
-          'id, display_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student, followers_count, last_seen_at',
+          'id, display_name, avatar_url, city_id, university_id, school_id, department_id, study_year, is_verified_student, is_pre_student, followers_count, last_seen_at',
         )
         .neq('id', userId)
         .limit(limit)
 
-      const peersWithSocial = universityId
-        ? await withSocialQuery.eq('university_id', universityId)
-        : await withSocialQuery
+      withSocialQuery = applyPeerFilters(withSocialQuery, filters)
+      const peersWithSocial = await withSocialQuery
 
       if (peersWithSocial.error && hasMissingSchemaError(peersWithSocial.error)) {
-        const legacyQuery = supabase
+        let legacyQuery = supabase
           .from('public_profiles')
           .select(
             'id, display_name, avatar_url, university_id, study_year, is_verified_student, is_pre_student',
@@ -293,12 +335,14 @@ export default function AppLayout() {
           .neq('id', userId)
           .limit(limit)
 
-        const peersLegacy = universityId
-          ? await legacyQuery.eq('university_id', universityId)
-          : await legacyQuery
+        legacyQuery = applyPeerFilters(legacyQuery, filters)
+        const peersLegacy = await legacyQuery
 
         return ((peersLegacy.data ?? []) as PeerProfileRow[]).map((peer) => ({
           ...peer,
+          city_id: null,
+          school_id: null,
+          department_id: null,
           followers_count: 0,
           last_seen_at: null,
         }))
@@ -307,9 +351,16 @@ export default function AppLayout() {
       return (peersWithSocial.data ?? []) as PeerProfileRow[]
     }
 
-    let peerRows = await loadPeerRows(typedProfile.university_id, 80)
+    const suggestionFilters: PeerFilters = {
+      cityId: null,
+      universityId: null,
+      schoolId: null,
+      departmentId: null,
+    }
+
+    let peerRows = await loadPeerRows(80, suggestionFilters)
     if (peerRows.length < 8) {
-      const globalPeers = await loadPeerRows(null, 120)
+      const globalPeers = await loadPeerRows(120, {})
       const merged = new Map<string, PeerProfileRow>()
       for (const peer of [...peerRows, ...globalPeers]) {
         if (peer.id === userId) continue
@@ -325,50 +376,45 @@ export default function AppLayout() {
       const seenAt = new Date(peer.last_seen_at).getTime()
       return !Number.isNaN(seenAt) && now - seenAt <= onlineThreshold
     })
-    setActiveNowCount(onlinePeers.length + 1)
 
-    const suggestions = peerRows
-      .sort((a, b) => {
-        const aVerified = a.is_verified_student === true && a.is_pre_student !== true
-        const bVerified = b.is_verified_student === true && b.is_pre_student !== true
-        if (aVerified !== bVerified) return aVerified ? -1 : 1
+    const followsResponse = await supabase
+      .from('follows')
+      .select('followed_id')
+      .eq('follower_id', userId)
 
-        const aUniversityMatch =
-          typedProfile.university_id !== null && a.university_id === typedProfile.university_id
-        const bUniversityMatch =
-          typedProfile.university_id !== null && b.university_id === typedProfile.university_id
-        if (aUniversityMatch !== bUniversityMatch) return aUniversityMatch ? -1 : 1
+    let nextFollowingIds = new Set<string>()
+    if (hasMissingSchemaError(followsResponse.error, 'follows')) {
+      setSupportsFollowSystem(false)
+      setFollowingIds(new Set())
+    } else {
+      setSupportsFollowSystem(true)
+      nextFollowingIds = new Set((followsResponse.data ?? []).map((item) => item.followed_id))
+      setFollowingIds(nextFollowingIds)
+    }
 
-        const aYearMatch = a.study_year !== null && a.study_year === typedProfile.study_year
-        const bYearMatch = b.study_year !== null && b.study_year === typedProfile.study_year
-        if (aYearMatch !== bYearMatch) return aYearMatch ? -1 : 1
+    const nextActiveFollowingPeers = onlinePeers.filter((peer) => nextFollowingIds.has(peer.id))
+    setActiveFollowingPeers(nextActiveFollowingPeers)
+    setActiveNowCount(nextActiveFollowingPeers.length)
 
-        return (b.followers_count ?? 0) - (a.followers_count ?? 0)
-      })
-      .slice(0, 5)
+    const recommendationContext: RecommendationContext = {
+      cityId: typedProfile.city_id ?? null,
+      universityId: typedProfile.university_id ?? null,
+      schoolId: typedProfile.school_id ?? null,
+      departmentId: typedProfile.department_id ?? null,
+      studyYear: typedProfile.study_year ?? null,
+    }
+
+    const rankedPeers = sortByRecommendation(peerRows, recommendationContext)
+    const recommendationOnly = rankedPeers.filter(
+      (peer) => recommendationScore(peer, recommendationContext) > 0,
+    )
+    const candidatePeers = recommendationOnly.length > 0
+      ? recommendationOnly
+      : rankedPeers
+
+    const suggestions = candidatePeers.filter(isVerifiedCampusMember).slice(0, 5)
 
     setFollowSuggestions(suggestions)
-
-    if (suggestions.length > 0) {
-      const followsResponse = await supabase
-        .from('follows')
-        .select('followed_id')
-        .eq('follower_id', userId)
-        .in(
-          'followed_id',
-          suggestions.map((suggestion) => suggestion.id),
-        )
-
-      if (hasMissingSchemaError(followsResponse.error, 'follows')) {
-        setSupportsFollowSystem(false)
-        setFollowingIds(new Set())
-      } else {
-        setSupportsFollowSystem(true)
-        setFollowingIds(new Set((followsResponse.data ?? []).map((item) => item.followed_id)))
-      }
-    } else {
-      setFollowingIds(new Set())
-    }
 
     const peerMap = new Map(peerRows.map((peer) => [peer.id, peer]))
     const peerIds = peerRows.map((peer) => peer.id).slice(0, 50)
@@ -457,7 +503,9 @@ export default function AppLayout() {
     }))
 
     setNotifications(nextNotifications)
-    setIsLoading(false)
+    if (!isSilentRefresh) {
+      setIsLoading(false)
+    }
   }, [t])
 
   useEffect(() => {
@@ -469,6 +517,24 @@ export default function AppLayout() {
       window.clearTimeout(timerId)
     }
   }, [loadShell])
+
+  const scheduleShellRefresh = useCallback(() => {
+    if (shellRefreshTimeoutRef.current !== null) return
+    shellRefreshTimeoutRef.current = window.setTimeout(() => {
+      shellRefreshTimeoutRef.current = null
+      void loadShell({ silent: true })
+    }, 250)
+  }, [loadShell])
+
+  useEffect(
+    () => () => {
+      if (shellRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(shellRefreshTimeoutRef.current)
+        shellRefreshTimeoutRef.current = null
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!currentUserId) return
@@ -483,34 +549,87 @@ export default function AppLayout() {
           table: 'notifications',
           filter: `user_id=eq.${currentUserId}`,
         },
-        () => {
-          loadShell()
+        scheduleShellRefresh,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
         },
+        scheduleShellRefresh,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        scheduleShellRefresh,
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [currentUserId, loadShell])
+  }, [currentUserId, scheduleShellRefresh])
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    const intervalId = window.setInterval(scheduleShellRefresh, 8000)
+    const handleFocus = () => scheduleShellRefresh()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleShellRefresh()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [currentUserId, scheduleShellRefresh])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     navigate('/login')
   }
 
-  const handleToggleNotifications = async () => {
+  const handleToggleNotifications = async (currentTarget?: HTMLElement) => {
     const nextValue = !notificationsOpen
     setNotificationsOpen(nextValue)
     setIsBellPopping(true)
     window.setTimeout(() => setIsBellPopping(false), 200)
 
     if (nextValue) {
+      const panelWidth = Math.min(360, window.innerWidth * 0.88)
+      const fallbackLeft = Math.max(12, window.innerWidth - panelWidth - 14)
+      const anchorRect = currentTarget?.getBoundingClientRect()
+      const left = anchorRect
+        ? Math.min(
+            Math.max(12, anchorRect.right - panelWidth),
+            Math.max(12, window.innerWidth - panelWidth - 12),
+          )
+        : fallbackLeft
+      const top = anchorRect ? Math.max(12, anchorRect.bottom + 10) : 70
+      setNotificationPanelPosition({ left, top })
+
       const unreadIds = notifications
         .filter((notification) => !notification.read)
         .map((notification) => notification.id)
       await markAllNotificationsRead(unreadIds)
+      return
     }
+
+    setNotificationPanelPosition(null)
   }
 
   const handleToggleFollow = async (targetId: string) => {
@@ -553,7 +672,14 @@ export default function AppLayout() {
   }
 
   const notificationDropdown = (
-    <div className="absolute right-0 top-11 z-50 w-[320px] max-w-[85vw] rounded-2xl border border-[var(--border-primary)] bg-[var(--surface-elevated)] p-3 shadow-2xl backdrop-blur">
+    <div
+      className="notification-dropdown fixed z-[140] w-[360px] max-w-[88vw] rounded-2xl border border-[var(--border-primary)] bg-[color:var(--surface-elevated)]/98 p-3 shadow-[0_26px_52px_rgba(5,10,24,0.45)] ring-1 ring-white/10"
+      style={{
+        left: notificationPanelPosition?.left ?? Math.max(12, window.innerWidth - 360 - 14),
+        top: notificationPanelPosition?.top ?? 70,
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-semibold text-[var(--text-primary)]">
           {t({ en: 'Notifications', el: 'Ειδοποιησεις' })}
@@ -638,7 +764,9 @@ export default function AppLayout() {
             <div className="relative">
               <button
                 type="button"
-                onClick={handleToggleNotifications}
+                onClick={(event) => {
+                  void handleToggleNotifications(event.currentTarget)
+                }}
                 className={`relative rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] ${
                   isBellPopping ? 'scale-95' : ''
                 }`}
@@ -650,7 +778,6 @@ export default function AppLayout() {
                   </span>
                 ) : null}
               </button>
-              {notificationsOpen ? notificationDropdown : null}
             </div>
             <LanguageToggle showLabel={false} />
             <ThemeToggle />
@@ -690,7 +817,7 @@ export default function AppLayout() {
                             en: `Year ${studyYear}`,
                             el: `Ετος ${studyYear}`,
                           })
-                        : t({ en: 'Campus member', el: 'Μελος campus' })}
+                        : t({ en: 'Campus member', el: 'Μέλος campus' })}
                     </p>
                   </div>
                 </div>
@@ -698,7 +825,7 @@ export default function AppLayout() {
                 <div className="mb-4 grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2.5 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                      {t({ en: 'Active now', el: 'Active τωρα' })}
+                      {t({ en: 'Active now', el: 'Ενεργοί τώρα' })}
                     </p>
                     <p className="mt-0.5 text-sm font-semibold text-[var(--text-primary)]">
                       {activeNowCount}
@@ -761,7 +888,9 @@ export default function AppLayout() {
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={handleToggleNotifications}
+                      onClick={(event) => {
+                        void handleToggleNotifications(event.currentTarget)
+                      }}
                       className={`relative rounded-full border border-[var(--border-primary)] bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-primary)] ${
                         isBellPopping ? 'scale-95' : ''
                       }`}
@@ -773,7 +902,6 @@ export default function AppLayout() {
                         </span>
                       ) : null}
                     </button>
-                    {notificationsOpen ? notificationDropdown : null}
                   </div>
                 </div>
                 <ul className="space-y-2">
@@ -791,18 +919,84 @@ export default function AppLayout() {
               </section>
 
               <section className="social-card p-4">
-                <h3 className="text-sm font-semibold">
-                  {t({ en: 'Active now', el: 'Ενεργοι τωρα' })}
-                </h3>
-                <div className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-[pulse-soft_1.8s_ease-in-out_infinite]" />
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">
-                    {activeNowCount}{' '}
-                    <span className="font-normal text-[var(--text-secondary)]">
-                      {t({ en: 'students online', el: 'φοιτητες online' })}
+                <button
+                  type="button"
+                  onClick={() => setActiveNowOpen((previous) => !previous)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">
+                      {t({ en: 'Active now', el: 'Ενεργοί τώρα' })}
+                    </h3>
+                    <span className="text-[11px] font-semibold text-[var(--text-secondary)]">
+                      {activeNowOpen
+                        ? t({ en: 'Hide', el: 'Απόκρυψη' })
+                        : t({ en: 'View', el: 'Προβολή' })}
                     </span>
-                  </p>
-                </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-[pulse-soft_1.8s_ease-in-out_infinite]" />
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
+                      {activeNowCount}{' '}
+                      <span className="font-normal text-[var(--text-secondary)]">
+                        {t({ en: 'students online', el: 'φοιτητές online' })}
+                      </span>
+                    </p>
+                  </div>
+                </button>
+
+                {activeNowOpen ? (
+                  <div className="mt-3">
+                    {activeFollowingPeers.length === 0 ? (
+                      <p className="rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                        {t({
+                          en: 'No followed students are online right now.',
+                          el: 'Κανένας από όσους ακολουθείς δεν είναι online τώρα.',
+                        })}
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {activeFollowingPeers.map((peer) => {
+                          const peerName = peer.display_name ?? t({ en: 'Student', el: 'Φοιτητής' })
+                          return (
+                            <li key={peer.id}>
+                              <Link
+                                to={`/profile/${peer.id}`}
+                                className="flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-2.5 py-2"
+                              >
+                                <Avatar
+                                  name={peerName}
+                                  url={peer.avatar_url}
+                                  size="sm"
+                                  online={true}
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                                    {peerName}
+                                  </p>
+                                  <p className="text-[11px] text-[var(--text-secondary)]">
+                                    {peer.study_year
+                                      ? t({
+                                          en: `Year ${peer.study_year}`,
+                                          el: `Έτος ${peer.study_year}`,
+                                        })
+                                      : t({ en: 'Campus', el: 'Campus' })}
+                                  </p>
+                                </div>
+                              </Link>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                    <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
+                      {t({
+                        en: 'Only students you follow are shown here.',
+                        el: 'Εδώ εμφανίζονται μόνο φοιτητές που ακολουθείς.',
+                      })}
+                    </p>
+                  </div>
+                ) : null}
               </section>
 
               <section className="social-card p-4">
@@ -819,6 +1013,14 @@ export default function AppLayout() {
                   >
                     {t({ en: 'View all', el: 'Δες ολους' })}
                   </Link>
+                </div>
+                <div className="mt-3 rounded-xl border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2">
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    {t({
+                      en: 'Advanced filters are available on the Students page.',
+                      el: 'Τα αναλυτικά φίλτρα είναι διαθέσιμα στη σελίδα Φοιτητές.',
+                    })}
+                  </p>
                 </div>
 
                 {followSuggestions.length === 0 ? (
@@ -933,6 +1135,21 @@ export default function AppLayout() {
         </div>
       </div>
 
+      {notificationsOpen ? (
+        <>
+          <button
+            type="button"
+            className="notification-backdrop fixed inset-0 z-[130]"
+            onClick={() => {
+              setNotificationsOpen(false)
+              setNotificationPanelPosition(null)
+            }}
+            aria-label={t({ en: 'Close notifications', el: 'Close notifications' })}
+          />
+          {notificationDropdown}
+        </>
+      ) : null}
+
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-primary)] bg-[color:var(--bg-secondary)]/90 backdrop-blur md:hidden">
         <nav className="mx-auto flex max-w-lg items-center justify-around px-2 py-2">
           <NavLink
@@ -942,6 +1159,14 @@ export default function AppLayout() {
             }
           >
             {t({ en: 'Feed', el: 'Ροη' })}
+          </NavLink>
+          <NavLink
+            to="/universities"
+            className={({ isActive }) =>
+              `text-xs font-semibold ${isActive ? 'text-cyan-200' : 'text-[var(--text-secondary)]'}`
+            }
+          >
+            {t({ en: 'Universities', el: 'Πανεπιστήμια' })}
           </NavLink>
           <NavLink
             to="/marketplace"
@@ -961,7 +1186,9 @@ export default function AppLayout() {
           </NavLink>
           <button
             type="button"
-            onClick={handleToggleNotifications}
+            onClick={(event) => {
+              void handleToggleNotifications(event.currentTarget)
+            }}
             className="relative text-xs font-semibold text-[var(--text-secondary)]"
           >
             {t({ en: 'Alerts', el: 'Ειδοποιησεις' })}
@@ -984,3 +1211,4 @@ export default function AppLayout() {
     </div>
   )
 }
+

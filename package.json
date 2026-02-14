@@ -9,6 +9,7 @@
     "preview": "pnpm -C apps/web preview",
     "lint": "pnpm -C apps/web lint",
     "format": "pnpm -C apps/web format",
-    "typecheck": "pnpm -C apps/web typecheck"
+    "typecheck": "pnpm -C apps/web typecheck",
+    "cli": "pnpm -C packages/cli start"
   }
 }

@@ -38,8 +38,10 @@ export default function Login() {
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">{t({ en: 'Sign in', el: 'Σύνδεση' })}</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+          {t({ en: 'Sign in', el: 'Σύνδεση' })}
+        </h1>
+        <p className="text-sm text-[var(--text-secondary)]">
           {t({
             en: 'Use email and password to continue.',
             el: 'Χρησιμοποίησε email και κωδικό για να συνεχίσεις.',
@@ -48,10 +50,10 @@ export default function Login() {
       </header>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
           Email
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-blue-400/60 focus:outline-none"
             type="email"
             autoComplete="email"
             placeholder="you@uni.gr"
@@ -61,10 +63,10 @@ export default function Login() {
           />
         </label>
 
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
           {t({ en: 'Password', el: 'Κωδικός' })}
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-blue-400/60 focus:outline-none"
             type="password"
             autoComplete="current-password"
             placeholder="********"
@@ -75,7 +77,7 @@ export default function Login() {
         </label>
 
         <button
-          className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:opacity-50"
           type="submit"
           disabled={isSubmitting}
         >
@@ -86,14 +88,14 @@ export default function Login() {
       </form>
 
       {errorMessage ? (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
           {t(errorMessage)}
         </p>
       ) : null}
 
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-[var(--text-secondary)]">
         {t({ en: "Don't have an account?", el: 'Δεν έχεις λογαριασμό;' })}{' '}
-        <Link className="font-semibold text-slate-900" to="/signup">
+        <Link className="font-semibold text-[var(--accent)]" to="/signup">
           {t({ en: 'Create an account', el: 'Δημιούργησε λογαριασμό' })}
         </Link>
         .

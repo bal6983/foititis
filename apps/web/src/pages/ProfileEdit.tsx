@@ -1,6 +1,12 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useI18n } from '../lib/i18n'
 import { supabase } from '../lib/supabaseClient'
+import {
+  fetchDepartmentsForSchool,
+  fetchSchoolsForUniversity,
+  fetchUniversitiesForCity,
+} from '../lib/universityLookup'
 
 type OptionItem = {
   id: string
@@ -12,23 +18,29 @@ function uniqueById<T extends { id: string }>(items: T[]) {
 }
 
 export default function ProfileEdit() {
+  const { t } = useI18n()
   const [fullName, setFullName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [cityId, setCityId] = useState('')
   const [universityId, setUniversityId] = useState('')
   const [schoolId, setSchoolId] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
   const [cities, setCities] = useState<OptionItem[]>([])
   const [universities, setUniversities] = useState<OptionItem[]>([])
   const [schools, setSchools] = useState<OptionItem[]>([])
+  const [departments, setDepartments] = useState<OptionItem[]>([])
   const [isLoadingCities, setIsLoadingCities] = useState(true)
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(false)
   const [isLoadingSchools, setIsLoadingSchools] = useState(false)
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false)
   const [citiesErrorMessage, setCitiesErrorMessage] = useState('')
   const [universitiesErrorMessage, setUniversitiesErrorMessage] = useState('')
   const [schoolsErrorMessage, setSchoolsErrorMessage] = useState('')
+  const [departmentsErrorMessage, setDepartmentsErrorMessage] = useState('')
   const [userId, setUserId] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isVerifiedStudent, setIsVerifiedStudent] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const navigate = useNavigate()
@@ -53,7 +65,10 @@ export default function ProfileEdit() {
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setCitiesErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των πόλεων.${details}`,
+          t({
+            en: `Unable to load cities.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση των πόλεων.${details}`,
+          }),
         )
         setIsLoadingCities(false)
         return
@@ -63,12 +78,12 @@ export default function ProfileEdit() {
       setIsLoadingCities(false)
     }
 
-    loadCities()
+    void loadCities()
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     let isMounted = true
@@ -83,33 +98,32 @@ export default function ProfileEdit() {
       setIsLoadingUniversities(true)
       setUniversitiesErrorMessage('')
 
-      const { data, error } = await supabase
-        .from('universities')
-        .select('id, name')
-        .eq('city_id', cityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchUniversitiesForCity(cityId)
 
       if (!isMounted) return
 
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setUniversitiesErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των πανεπιστημίων.${details}`,
+          t({
+            en: `Unable to load universities.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση των πανεπιστημίων.${details}`,
+          }),
         )
         setIsLoadingUniversities(false)
         return
       }
 
-      setUniversities(uniqueById(data ?? []))
+      setUniversities(uniqueById((data ?? []) as OptionItem[]))
       setIsLoadingUniversities(false)
     }
 
-    loadUniversities()
+    void loadUniversities()
 
     return () => {
       isMounted = false
     }
-  }, [cityId])
+  }, [cityId, t])
 
   useEffect(() => {
     let isMounted = true
@@ -124,18 +138,19 @@ export default function ProfileEdit() {
       setIsLoadingSchools(true)
       setSchoolsErrorMessage('')
 
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('university_id', universityId)
-        .order('name', { ascending: true })
+      const { data, error } = await fetchSchoolsForUniversity(universityId, {
+        cityId: cityId || null,
+      })
 
       if (!isMounted) return
 
       if (error) {
         const details = error.message ? ` (${error.message})` : ''
         setSchoolsErrorMessage(
-          `Δεν ήταν δυνατή η φόρτωση των σχολών.${details}`,
+          t({
+            en: `Unable to load schools.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση των σχολών.${details}`,
+          }),
         )
         setIsLoadingSchools(false)
         return
@@ -145,12 +160,54 @@ export default function ProfileEdit() {
       setIsLoadingSchools(false)
     }
 
-    loadSchools()
+    void loadSchools()
 
     return () => {
       isMounted = false
     }
-  }, [universityId])
+  }, [cityId, universityId, t])
+
+  useEffect(() => {
+    let isMounted = true
+
+    if (!schoolId) {
+      setDepartments([])
+      setIsLoadingDepartments(false)
+      return
+    }
+
+    const loadDepartments = async () => {
+      setIsLoadingDepartments(true)
+      setDepartmentsErrorMessage('')
+
+      const { data, error } = await fetchDepartmentsForSchool(schoolId, {
+        cityId: cityId || null,
+      })
+
+      if (!isMounted) return
+
+      if (error) {
+        const details = error.message ? ` (${error.message})` : ''
+        setDepartmentsErrorMessage(
+          t({
+            en: `Unable to load departments.${details}`,
+            el: `Αδυναμία φόρτωσης τμημάτων.${details}`,
+          }),
+        )
+        setIsLoadingDepartments(false)
+        return
+      }
+
+      setDepartments(uniqueById((data ?? []) as OptionItem[]))
+      setIsLoadingDepartments(false)
+    }
+
+    void loadDepartments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cityId, schoolId, t])
 
   useEffect(() => {
     let isMounted = true
@@ -165,7 +222,12 @@ export default function ProfileEdit() {
 
       if (userError || !userData.user) {
         const details = userError?.message ? ` (${userError.message})` : ''
-        setErrorMessage(`Δεν ήταν δυνατή η φόρτωση του χρήστη.${details}`)
+        setErrorMessage(
+          t({
+            en: `Unable to load current user.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση του χρήστη.${details}`,
+          }),
+        )
         setIsLoading(false)
         return
       }
@@ -174,7 +236,9 @@ export default function ProfileEdit() {
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, display_name, city_id, university_id, school_id')
+        .select(
+          'full_name, display_name, city_id, university_id, school_id, department_id, is_verified_student',
+        )
         .eq('id', userData.user.id)
         .maybeSingle()
 
@@ -182,7 +246,12 @@ export default function ProfileEdit() {
 
       if (profileError || !profile) {
         const details = profileError?.message ? ` (${profileError.message})` : ''
-        setErrorMessage(`Δεν ήταν δυνατή η φόρτωση του προφίλ.${details}`)
+        setErrorMessage(
+          t({
+            en: `Unable to load profile.${details}`,
+            el: `Δεν ήταν δυνατή η φόρτωση του προφίλ.${details}`,
+          }),
+        )
         setIsLoading(false)
         return
       }
@@ -192,10 +261,12 @@ export default function ProfileEdit() {
       setCityId(profile.city_id ?? '')
       setUniversityId(profile.university_id ?? '')
       setSchoolId(profile.school_id ?? '')
+      setDepartmentId(profile.department_id ?? '')
+      setIsVerifiedStudent(profile.is_verified_student === true)
       setIsLoading(false)
     }
 
-    loadProfile()
+    void loadProfile()
 
     return () => {
       isMounted = false
@@ -203,18 +274,27 @@ export default function ProfileEdit() {
         window.clearTimeout(redirectTimeoutRef.current)
       }
     }
-  }, [])
+  }, [t])
 
   const handleCityChange = (value: string) => {
     setCityId(value)
     setUniversityId('')
     setSchoolId('')
+    setDepartmentId('')
     setSchools([])
+    setDepartments([])
   }
 
   const handleUniversityChange = (value: string) => {
     setUniversityId(value)
     setSchoolId('')
+    setDepartmentId('')
+    setDepartments([])
+  }
+
+  const handleSchoolChange = (value: string) => {
+    setSchoolId(value)
+    setDepartmentId('')
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -222,36 +302,55 @@ export default function ProfileEdit() {
     setErrorMessage('')
     setSuccessMessage('')
 
+    if (isVerifiedStudent) {
+      setErrorMessage(
+        t({
+          en: 'Verified student profile data is locked. Submit a change request first.',
+          el: 'Τα στοιχεία επαληθευμένου φοιτητή είναι κλειδωμένα. Χρειάζεται πρώτα αίτημα αλλαγής.',
+        }),
+      )
+      return
+    }
+
     const trimmedFullName = fullName.trim()
     const trimmedDisplayName = displayName.trim()
 
     if (!trimmedFullName) {
-      setErrorMessage('Το ονοματεπώνυμο είναι υποχρεωτικό.')
+      setErrorMessage(t({ en: 'Full name is required.', el: 'Το ονοματεπώνυμο είναι υποχρεωτικό.' }))
       return
     }
 
     if (!trimmedDisplayName) {
-      setErrorMessage('Το όνομα εμφάνισης είναι υποχρεωτικό.')
+      setErrorMessage(t({ en: 'Display name is required.', el: 'Το όνομα εμφάνισης είναι υποχρεωτικό.' }))
       return
     }
 
     const hasAcademicSelection =
       cityId.trim() !== '' ||
       universityId.trim() !== '' ||
-      schoolId.trim() !== ''
+      schoolId.trim() !== '' ||
+      departmentId.trim() !== ''
 
     if (
       (isPreStudentSetup || hasAcademicSelection) &&
-      (!cityId || !universityId || !schoolId)
+      (!cityId || !universityId || !schoolId || !departmentId)
     ) {
       setErrorMessage(
-        'Συμπλήρωσε την πόλη, το πανεπιστήμιο και τη σχολή σου.',
+        t({
+          en: 'Fill in city, university, school and department.',
+          el: 'Συμπλήρωσε πόλη, πανεπιστήμιο, σχολή και τμήμα.',
+        }),
       )
       return
     }
 
     if (!userId) {
-      setErrorMessage('Δεν ήταν δυνατή η αναγνώριση του χρήστη.')
+      setErrorMessage(
+        t({
+          en: 'Unable to identify current user.',
+          el: 'Δεν ήταν δυνατή η αναγνώριση του χρήστη.',
+        }),
+      )
       return
     }
 
@@ -269,18 +368,24 @@ export default function ProfileEdit() {
         city_id: cityId || null,
         university_id: universityId || null,
         school_id: schoolId || null,
+        department_id: departmentId || null,
       })
       .eq('id', userId)
 
     if (error) {
       const details = error.message ? ` (${error.message})` : ''
-      setErrorMessage(`Δεν ήταν δυνατή η ενημέρωση του προφίλ.${details}`)
+      setErrorMessage(
+        t({
+          en: `Unable to update profile.${details}`,
+          el: `Δεν ήταν δυνατή η ενημέρωση του προφίλ.${details}`,
+        }),
+      )
       setIsSubmitting(false)
       return
     }
 
     setIsSubmitting(false)
-    setSuccessMessage('Το προφίλ ενημερώθηκε επιτυχώς.')
+    setSuccessMessage(t({ en: 'Profile updated successfully.', el: 'Το προφίλ ενημερώθηκε επιτυχώς.' }))
     redirectTimeoutRef.current = window.setTimeout(() => {
       navigate(isPreStudentSetup ? '/dashboard' : '/profile')
     }, 900)
@@ -288,132 +393,169 @@ export default function ProfileEdit() {
 
   if (isLoading) {
     return (
-      <section className="space-y-2">
-        <h1 className="text-xl font-semibold">Φόρτωση προφίλ...</h1>
-        <p className="text-sm text-slate-600">
-          Προετοιμάζουμε τη φόρμα επεξεργασίας.
+      <section className="space-y-2 text-[var(--text-primary)]">
+        <h1 className="text-xl font-semibold">{t({ en: 'Loading profile...', el: 'Φόρτωση προφίλ...' })}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {t({
+            en: 'Preparing profile edit form.',
+            el: 'Προετοιμάζουμε τη φόρμα επεξεργασίας.',
+          })}
         </p>
       </section>
     )
   }
 
-  const isUniversityDisabled = !cityId || isLoadingUniversities
-  const isSchoolDisabled = !universityId || isLoadingSchools
+  const isCoreLocked = isVerifiedStudent
+  const isUniversityDisabled = isCoreLocked || !cityId || isLoadingUniversities
+  const isSchoolDisabled = isCoreLocked || !universityId || isLoadingSchools
+  const isDepartmentDisabled = isCoreLocked || !schoolId || isLoadingDepartments
+
+  const fieldClass =
+    'mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-blue-400/60 focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed'
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 text-[var(--text-primary)]">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Επεξεργασία προφίλ</h1>
-        <p className="text-sm text-slate-600">
-          Ενημέρωσε τα βασικά στοιχεία του προφίλ σου.
+        <h1 className="text-2xl font-semibold">{t({ en: 'Edit profile', el: 'Επεξεργασία προφίλ' })}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {t({
+            en: 'Update your basic profile information.',
+            el: 'Ενημέρωσε τα βασικά στοιχεία του προφίλ σου.',
+          })}
         </p>
       </header>
 
+      {isCoreLocked ? (
+        <p className="rounded-lg border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          {t({
+            en: 'Verified profile details are locked. To change them, submit a change request.',
+            el: 'Τα στοιχεία επαληθευμένου προφίλ είναι κλειδωμένα. Για αλλαγές απαιτείται αίτημα.',
+          })}
+        </p>
+      ) : null}
+
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block space-y-1 text-sm font-medium">
-          Ονοματεπώνυμο
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'Full name', el: 'Ονοματεπώνυμο' })}
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className={fieldClass}
             type="text"
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
             required
+            disabled={isCoreLocked}
           />
         </label>
 
-        <label className="block space-y-1 text-sm font-medium">
-          Όνομα εμφάνισης
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'Display name', el: 'Όνομα εμφάνισης' })}
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className={fieldClass}
             type="text"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
             required
+            disabled={isCoreLocked}
           />
         </label>
 
-        <label className="block space-y-1 text-sm font-medium">
-          Πόλη σπουδών
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'Study city', el: 'Πόλη σπουδών' })}
           <select
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className={fieldClass}
             value={cityId}
             onChange={(event) => handleCityChange(event.target.value)}
-            disabled={isLoadingCities}
+            disabled={isLoadingCities || isCoreLocked}
             required={isPreStudentSetup}
           >
-            <option value="">Επίλεξε πόλη</option>
+            <option value="">{t({ en: 'Select city', el: 'Επίλεξε πόλη' })}</option>
             {cities.map((city) => (
               <option key={city.id} value={city.id}>
                 {city.name}
               </option>
             ))}
           </select>
-          {citiesErrorMessage ? (
-            <span className="text-xs text-rose-600">{citiesErrorMessage}</span>
-          ) : null}
+          {citiesErrorMessage ? <span className="text-xs text-rose-300">{citiesErrorMessage}</span> : null}
         </label>
 
-        <label className="block space-y-1 text-sm font-medium">
-          Πανεπιστήμιο
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'University', el: 'Πανεπιστήμιο' })}
           <select
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className={fieldClass}
             value={universityId}
             onChange={(event) => handleUniversityChange(event.target.value)}
             disabled={isUniversityDisabled}
             required={isPreStudentSetup}
           >
-            <option value="">Επίλεξε πανεπιστήμιο</option>
+            <option value="">{t({ en: 'Select university', el: 'Επίλεξε πανεπιστήμιο' })}</option>
             {universities.map((university) => (
               <option key={university.id} value={university.id}>
                 {university.name}
               </option>
             ))}
           </select>
-          {universitiesErrorMessage ? (
-            <span className="text-xs text-rose-600">
-              {universitiesErrorMessage}
-            </span>
-          ) : null}
+          {universitiesErrorMessage ? <span className="text-xs text-rose-300">{universitiesErrorMessage}</span> : null}
         </label>
 
-        <label className="block space-y-1 text-sm font-medium">
-          Σχολή
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'School', el: 'Σχολή' })}
           <select
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+            className={fieldClass}
             value={schoolId}
-            onChange={(event) => setSchoolId(event.target.value)}
+            onChange={(event) => handleSchoolChange(event.target.value)}
             disabled={isSchoolDisabled}
             required={isPreStudentSetup}
           >
-            <option value="">Επίλεξε σχολή</option>
+            <option value="">{t({ en: 'Select school', el: 'Επίλεξε σχολή' })}</option>
             {schools.map((school) => (
               <option key={school.id} value={school.id}>
                 {school.name}
               </option>
             ))}
           </select>
-          {schoolsErrorMessage ? (
-            <span className="text-xs text-rose-600">{schoolsErrorMessage}</span>
-          ) : null}
+          {schoolsErrorMessage ? <span className="text-xs text-rose-300">{schoolsErrorMessage}</span> : null}
+        </label>
+
+        <label className="block space-y-1 text-sm font-medium text-[var(--text-primary)]">
+          {t({ en: 'Department', el: 'Τμήμα' })}
+          <select
+            className={fieldClass}
+            value={departmentId}
+            onChange={(event) => setDepartmentId(event.target.value)}
+            disabled={isDepartmentDisabled}
+            required={isPreStudentSetup}
+          >
+            <option value="">{t({ en: 'Select department', el: 'Επίλεξε τμήμα' })}</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+          {departmentsErrorMessage ? <span className="text-xs text-rose-300">{departmentsErrorMessage}</span> : null}
         </label>
 
         <button
-          className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isCoreLocked}
         >
-          {isSubmitting ? 'Γίνεται αποθήκευση...' : 'Αποθήκευση αλλαγών'}
+          {isSubmitting
+            ? t({ en: 'Saving...', el: 'Γίνεται αποθήκευση...' })
+            : isCoreLocked
+              ? t({ en: 'Locked for verified profile', el: 'Κλειδωμένο για verified προφίλ' })
+              : t({ en: 'Save changes', el: 'Αποθήκευση αλλαγών' })}
         </button>
       </form>
 
       {errorMessage ? (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
           {errorMessage}
         </p>
       ) : null}
 
       {successMessage ? (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-lg border border-emerald-300/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
           {successMessage}
         </p>
       ) : null}

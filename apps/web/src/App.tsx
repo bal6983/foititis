@@ -20,6 +20,7 @@ import Chats from './pages/Chats'
 import AuthCallback from './pages/AuthCallback'
 import Signup from './pages/Signup'
 import Students from './pages/Students'
+import Universities from './pages/Universities'
 import Saved from './pages/Saved'
 import WantedDetail from './pages/WantedDetail'
 import Verification from './pages/Verification'
@@ -71,6 +72,7 @@ function App() {
             <Route path="/chat/:conversationId" element={<ChatThread />} />
             <Route path="chats" element={<Chats />} />
             <Route path="students" element={<Students />} />
+            <Route path="universities" element={<Universities />} />
             <Route path="verification" element={<Verification />} />
           </Route>
         </Route>
